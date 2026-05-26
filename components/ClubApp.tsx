@@ -2094,7 +2094,7 @@ export default function ClubApp() {
     const savingActiveReplay =
       Boolean(activeReplay && activeReplay.round === resultRound && activeReplay.court === match.court) &&
       (status === "saved" || status === "completed") &&
-      savedResults[key]?.status === "deferred";
+      (savedResults[key]?.status === "deferred" || savedResults[key]?.status === "skipped_not_started");
 
     console.log("[ClubMatch] save/skip match requested", {
       key,
@@ -2246,70 +2246,60 @@ export default function ClubApp() {
 
   const replaySkippedRound = (round: number) => {
     const replayMatches = roundMatches[round] ?? [];
-    const hasSkippedNotStarted = replayMatches.some((match) => savedResults[matchResultKey(round, match.court)]?.status === "skipped_not_started");
+    const replayMatch = replayMatches.find((match) => savedResults[matchResultKey(round, match.court)]?.status === "skipped_not_started");
 
-    if (!hasSkippedNotStarted || replayMatches.length === 0) {
+    if (!replayMatch) {
       return;
     }
 
     console.log("[ClubMatch] replay skipped round", {
       originalRound: round,
-      matches: replayMatches.map((match) => ({
-        court: match.court,
-        teamA: match.teamA.map((player) => player.name),
-        teamB: match.teamB.map((player) => player.name)
-      }))
+      court: replayMatch.court,
+      teamA: replayMatch.teamA.map((player) => player.name),
+      teamB: replayMatch.teamB.map((player) => player.name)
     });
 
-    setRoundNumber(round);
     setReplayRoundNumber(round);
-    setMatches(replayMatches.map((match) => ({ ...match, scoreA: "", scoreB: "" })));
-    setSavedResults((current) => {
-      const next = { ...current };
-      replayMatches.forEach((match) => {
-        const key = matchResultKey(round, match.court);
-
-        if (next[key]?.status === "skipped_not_started") {
-          delete next[key];
-        }
-      });
-      return next;
-    });
+    setActiveReplay({ round, court: replayMatch.court });
+    setMatches([{ ...replayMatch, scoreA: "", scoreB: "" }]);
   };
 
   const playDeferredMatch = (round: number, court: number) => {
-    const deferredMatch = (roundMatches[round] ?? []).find((match) => match.court === court);
+    const pendingMatch = (roundMatches[round] ?? []).find((match) => match.court === court);
     const key = matchResultKey(round, court);
+    const pendingStatus = savedResults[key]?.status;
 
-    if (!deferredMatch || savedResults[key]?.status !== "deferred") {
+    if (!pendingMatch || (pendingStatus !== "deferred" && pendingStatus !== "skipped_not_started")) {
       return;
     }
 
-    console.log("[ClubMatch] play deferred match now", {
+    console.log("[ClubMatch] play pending replay match now", {
       originalRound: round,
       court,
-      teamA: deferredMatch.teamA.map((player) => player.name),
-      teamB: deferredMatch.teamB.map((player) => player.name)
+      pendingStatus,
+      teamA: pendingMatch.teamA.map((player) => player.name),
+      teamB: pendingMatch.teamB.map((player) => player.name)
     });
 
     setReplayRoundNumber(round);
     setActiveReplay({ round, court });
-    setMatches([{ ...deferredMatch, scoreA: "", scoreB: "" }]);
+    setMatches([{ ...pendingMatch, scoreA: "", scoreB: "" }]);
     setLastDeferredPlayerIdsForNextRound((current) => {
-      const replayPlayerIds = new Set([...deferredMatch.teamA, ...deferredMatch.teamB].map((player) => player.id));
+      const replayPlayerIds = new Set([...pendingMatch.teamA, ...pendingMatch.teamB].map((player) => player.id));
       return current.filter((id) => !replayPlayerIds.has(id));
     });
   };
 
   const cancelDeferredMatch = (round: number, court: number) => {
-    const deferredMatch = (roundMatches[round] ?? []).find((match) => match.court === court);
+    const pendingMatch = (roundMatches[round] ?? []).find((match) => match.court === court);
     const key = matchResultKey(round, court);
+    const pendingStatus = savedResults[key]?.status;
 
-    if (!deferredMatch || savedResults[key]?.status !== "deferred") {
+    if (!pendingMatch || (pendingStatus !== "deferred" && pendingStatus !== "skipped_not_started")) {
       return;
     }
 
-    console.log("[ClubMatch] cancel deferred match", { originalRound: round, court });
+    console.log("[ClubMatch] cancel pending replay match", { originalRound: round, court, pendingStatus });
 
     setDeferredMatchBlocks((current) => current.filter((block) => block.id !== key));
     setSavedResults((current) => ({
@@ -2317,8 +2307,8 @@ export default function ClubApp() {
       [key]: {
         skipped: true,
         status: "cancelled",
-        teamAIds: deferredMatch.teamA.map((player) => player.id),
-        teamBIds: deferredMatch.teamB.map((player) => player.id),
+        teamAIds: pendingMatch.teamA.map((player) => player.id),
+        teamBIds: pendingMatch.teamB.map((player) => player.id),
         scoreA: undefined,
         scoreB: undefined
       }
@@ -3409,12 +3399,12 @@ function ActiveSessionScreen({
   const resultForMatch = (match: Match) => {
     const result = savedResults[matchResultKey(activeResultRound, match.court)];
 
-    return isReplayMode && result?.status === "deferred" ? undefined : result;
+    return isReplayMode && (result?.status === "deferred" || result?.status === "skipped_not_started") ? undefined : result;
   };
   const resolvedCount = matches.filter((match) => isResolvedResult(resultForMatch(match))).length;
   const allResultsResolved = matches.length > 0 && resolvedCount === matches.length;
   const nextRoundDisabled = isReplayMode || sessionEnded || roundNumber >= totalRounds || !allResultsResolved || sessionPlayers.length < 4;
-  const pendingDeferredMatches = Object.entries(roundMatches).flatMap(([roundKey, roundMatchList]) => {
+  const pendingReplayMatches = Object.entries(roundMatches).flatMap(([roundKey, roundMatchList]) => {
     const originalRound = Number(roundKey);
 
     return roundMatchList
@@ -3423,9 +3413,9 @@ function ActiveSessionScreen({
         match,
         result: savedResults[matchResultKey(originalRound, match.court)]
       }))
-      .filter((item) => item.result?.status === "deferred");
+      .filter((item) => item.result?.status === "deferred" || item.result?.status === "skipped_not_started");
   });
-  const sessionCompleted = !isReplayMode && isFinalRound && allResultsResolved && pendingDeferredMatches.length === 0;
+  const sessionCompleted = !isReplayMode && isFinalRound && allResultsResolved && pendingReplayMatches.length === 0;
   const plannedRoundsResolved = !isReplayMode && isFinalRound && allResultsResolved;
   const resolvedRounds = Math.max(0, Math.min(totalRounds, roundNumber - (allResultsResolved ? 0 : 1)));
   const progressPercent = totalRounds > 0 ? Math.min((resolvedRounds / totalRounds) * 100, 100) : 0;
@@ -3454,7 +3444,7 @@ function ActiveSessionScreen({
   const repeatedCurrentMatch =
     matches.length > 0 &&
     matches.some((match) => generatedHistoryBeforeCurrentRound.exactMatchKeys.includes(exactMatchKey(match.teamA, match.teamB)));
-  const deferredMatches = pendingDeferredMatches;
+  const deferredMatches = pendingReplayMatches;
   const recalculatedSessionStats = getSessionStatsFromMatches({ players: selectedPlayers, roundMatches, savedResults });
   const statsMismatchDetected = selectedPlayers.some(
     (player) => getPlayerStat(sessionStats, player.id).matches !== getPlayerStat(recalculatedSessionStats.stats, player.id).matches
@@ -3501,19 +3491,19 @@ function ActiveSessionScreen({
   const imbalanceReasons = [
     statusChangedPlayers.length > 0 ? "Some players were unavailable or marked not arrived." : null,
     hasSkippedOrDeferredMatches ? "Some matches were skipped or deferred." : null,
-    deferredMatches.length > 0 ? "A replay/pending match has not been completed." : null,
+    pendingReplayMatches.length > 0 ? "A replay/pending match has not been completed." : null,
     statusChangedPlayers.length > 0 || selectedPlayers.length !== sessionPlayers.length ? "Player pool changed during the session." : null,
     !perfectDistributionForSelectedPlayers ? "Generator could not distribute matches evenly with current constraints." : null
   ].filter((reason): reason is string => Boolean(reason));
   const imbalanceActions = [
-    deferredMatches.length > 0 ? "Complete pending replay matches." : null,
-    deferredMatches.length > 0 ? "Cancel pending replay if it will not be played." : null,
+    pendingReplayMatches.length > 0 ? "Complete pending replay matches first." : null,
+    pendingReplayMatches.length > 0 ? "Cancel pending replay if it will not be played." : null,
     statusChangedPlayers.some((player) => sessionPlayerStatuses[player.id] === "not_arrived" || sessionPlayerStatuses[player.id] === "temporarily_unavailable")
       ? "Mark unavailable players as available if they have arrived."
       : null,
-    deferredMatches.length > 0 ? "Add more rounds only if imbalance remains after replay." : null,
-    deferredMatches.length === 0 && !isFinalRound ? "Continue generating rounds to balance match count." : null,
-    deferredMatches.length === 0 && statusChangedPlayers.length === 0 && isFinalRound && matchCountGapValue > 0 ? "Add more rounds to give lower-count players another match." : null,
+    pendingReplayMatches.length > 0 ? "Add more rounds only if imbalance remains after replay." : null,
+    pendingReplayMatches.length === 0 && !isFinalRound ? "Continue generating rounds to balance match count." : null,
+    pendingReplayMatches.length === 0 && statusChangedPlayers.length === 0 && isFinalRound && matchCountGapValue > 0 ? "Add more rounds to give lower-count players another match." : null,
     isFinalRound ? "End session anyway." : null
   ].filter((action): action is string => Boolean(action));
 
@@ -3529,6 +3519,9 @@ function ActiveSessionScreen({
               {isReplayMode ? `Round ${activeReplay?.round} Replay` : `Round ${roundNumber} of ${totalRounds}`}
             </h2>
             <p className="mt-1 text-xs font-bold text-ink/55">{resolvedRounds} of {totalRounds} rounds resolved</p>
+            <p className="mt-1 max-w-xs text-[11px] font-semibold text-ink/45">
+              Resolved means the round has been handled. Skipped or replay-pending rounds may not be counted in leaderboard stats yet.
+            </p>
           </div>
           <button
             onClick={onGenerate}
@@ -3666,7 +3659,7 @@ function ActiveSessionScreen({
       />
 
       <PendingMatchesSection
-        deferredMatches={deferredMatches}
+        pendingMatches={pendingReplayMatches}
         onPlayNow={onPlayDeferredMatch}
         onCancelMatch={onCancelDeferredMatch}
       />
@@ -4225,15 +4218,15 @@ function PlayerAvailabilitySection({
 }
 
 function PendingMatchesSection({
-  deferredMatches,
+  pendingMatches,
   onPlayNow,
   onCancelMatch
 }: {
-  deferredMatches: { round: number; match: Match; result?: SavedMatchResult }[];
+  pendingMatches: { round: number; match: Match; result?: SavedMatchResult }[];
   onPlayNow: (round: number, court: number) => void;
   onCancelMatch: (round: number, court: number) => void;
 }) {
-  if (deferredMatches.length === 0) {
+  if (pendingMatches.length === 0) {
     return null;
   }
 
@@ -4241,20 +4234,20 @@ function PendingMatchesSection({
     <Card>
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-lg font-black">Pending Matches / Play Later</h2>
+          <h2 className="text-lg font-black">Pending Replay Matches</h2>
           <p className="mt-1 text-xs font-bold text-ink/55">
-            Deferred matches have no score and do not affect the leaderboard until played.
+            Skipped or deferred matches have no score and do not affect the leaderboard until played.
           </p>
         </div>
-        <span className="rounded-lg bg-mist px-3 py-2 text-sm font-black">{deferredMatches.length}</span>
+        <span className="rounded-lg bg-mist px-3 py-2 text-sm font-black">{pendingMatches.length}</span>
       </div>
       <div className="mt-3 space-y-2">
-        {deferredMatches.map(({ round, match }) => (
+        {pendingMatches.map(({ round, match }) => (
           <div key={`${round}-${match.court}`} className="rounded-lg bg-mist p-3">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-sm font-black">Round {round} Play Later</p>
-                <p className="text-xs font-bold text-ink/55">Court {match.court} - Status: Play Later</p>
+                <p className="text-sm font-black">Round {round} Replay</p>
+                <p className="text-xs font-bold text-ink/55">Court {match.court} - Status: Not played</p>
               </div>
               <span className="rounded-full bg-white px-2 py-1 text-[11px] font-black text-ink/60">Not played</span>
             </div>
@@ -4262,15 +4255,12 @@ function PendingMatchesSection({
               <p className="truncate">A: {match.teamA.map((player) => player.name.split(" ")[0]).join(" / ")}</p>
               <p className="truncate">B: {match.teamB.map((player) => player.name.split(" ")[0]).join(" / ")}</p>
             </div>
-            <div className="mt-3 grid grid-cols-3 gap-2">
+            <div className="mt-3 grid grid-cols-2 gap-2">
               <button
                 onClick={() => onPlayNow(round, match.court)}
                 className="h-10 rounded-lg bg-court px-2 text-xs font-black text-white"
               >
                 Round {round} Replay
-              </button>
-              <button className="h-10 rounded-lg bg-white px-2 text-xs font-black text-ink/60">
-                Keep Later
               </button>
               <button
                 onClick={() => onCancelMatch(round, match.court)}
@@ -4612,7 +4602,7 @@ function ActiveSessionDebugPanel({
             <p>{leftPlayers.length ? leftPlayers.map((player) => player.name).join(", ") : "none"}</p>
           </div>
           <div>
-            <p className="font-black text-lime">Deferred matches</p>
+            <p className="font-black text-lime">Pending replay matches</p>
             <p>
               {deferredMatches.length
                 ? deferredMatches.map(({ round, match }) => `Round ${round} Court ${match.court}`).join(", ")
@@ -4638,7 +4628,7 @@ function ActiveSessionDebugPanel({
             </p>
           </div>
           <div>
-            <p className="font-black text-lime">Pending Play Later matches</p>
+            <p className="font-black text-lime">Pending replay match details</p>
             <p>
               {deferredMatches.length
                 ? deferredMatches.map(({ round, match }) => `Round ${round} Court ${match.court}: ${match.teamA.map((player) => player.name).join(" / ")} vs ${match.teamB.map((player) => player.name).join(" / ")}`).join(" | ")
@@ -5779,7 +5769,7 @@ function MatchCountImbalanceCard({
       {hasPendingReplays && (
         <div className="mt-2 rounded-lg bg-white/70 p-2 text-xs font-bold">
           <p>
-            There {pendingReplaySummaries.length === 1 ? "is" : "are"} {pendingReplaySummaries.length} pending Play Later match{pendingReplaySummaries.length === 1 ? "" : "es"} that {pendingReplaySummaries.length === 1 ? "has" : "have"} not been completed yet.
+            There {pendingReplaySummaries.length === 1 ? "is" : "are"} {pendingReplaySummaries.length} pending replay match{pendingReplaySummaries.length === 1 ? "" : "es"} that {pendingReplaySummaries.length === 1 ? "has" : "have"} not been completed yet.
           </p>
           <div className="mt-1 space-y-1">
             {pendingReplaySummaries.map((summary) => (
