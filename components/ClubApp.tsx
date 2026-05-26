@@ -2455,7 +2455,6 @@ export default function ClubApp() {
             onScore={updateScore}
             onPlayerChange={updateMatchPlayer}
             onMarkLeft={markPlayerLeft}
-            onMarkAvailable={(id) => updatePlayerSessionStatus(id, "active")}
             onPlayerStatusChange={updatePlayerSessionStatus}
             onSaveResult={(match) => saveMatchResult(match)}
             onSkipResult={(match, status, unavailableIds, unavailableStatus) =>
@@ -3314,7 +3313,6 @@ function ActiveSessionScreen({
   onScore,
   onPlayerChange,
   onMarkLeft,
-  onMarkAvailable,
   onPlayerStatusChange,
   onSaveResult,
   onSkipResult,
@@ -3356,7 +3354,6 @@ function ActiveSessionScreen({
   onScore: (court: number, team: "scoreA" | "scoreB", value: string) => void;
   onPlayerChange: (court: number, team: "teamA" | "teamB", playerIndex: number, playerId: number) => void;
   onMarkLeft: (id: number) => void;
-  onMarkAvailable: (id: number) => void;
   onPlayerStatusChange: (id: number, status: PlayerSessionStatus) => void;
   onSaveResult: (match: Match) => void;
   onSkipResult: (
@@ -3644,71 +3641,16 @@ function ActiveSessionScreen({
         )}
       </Card>
 
-      {unavailablePlayers.length > 0 && (
-        <UnavailablePlayersSection
-          unavailablePlayers={unavailablePlayers}
-          sessionPlayerStatuses={sessionPlayerStatuses}
-          onMarkAvailable={onMarkAvailable}
-        />
-      )}
-
-      <PlayerAvailabilitySection
-        players={selectedPlayers}
-        sessionPlayerStatuses={sessionPlayerStatuses}
-        onStatusChange={onPlayerStatusChange}
-      />
-
-      <PendingMatchesSection
-        pendingMatches={pendingReplayMatches}
-        onPlayNow={onPlayDeferredMatch}
-        onCancelMatch={onCancelDeferredMatch}
-      />
-
-      <FullSchedulePreview
-        open={schedulePreviewOpen}
-        onToggle={() => setSchedulePreviewOpen((current) => !current)}
-        currentRound={roundNumber}
-        totalRounds={totalRounds}
-        courtCount={courtCount}
-        selectedPlayers={selectedPlayers}
-        sessionPlayers={sessionPlayers}
-        participationSchedule={participationSchedule}
-        roundMatches={roundMatches}
-        savedResults={savedResults}
-        confirmRegeneration={confirmScheduleRegeneration}
-        onRequestRegeneration={() => setConfirmScheduleRegeneration(true)}
-        onCancelRegeneration={() => setConfirmScheduleRegeneration(false)}
-        onConfirmRegeneration={() => {
-          onRegenerateFutureRounds();
-          setConfirmScheduleRegeneration(false);
-        }}
-      />
-
       {matches.length === 0 ? (
         <div className="space-y-3 lg:grid lg:grid-cols-[0.85fr_1.15fr] lg:items-start lg:gap-4 lg:space-y-0">
-          <RoundOverview
-            totalRounds={totalRounds}
-            currentRound={roundNumber}
-            replayRoundNumber={replayRoundNumber}
-            roundMatches={roundMatches}
-            savedResults={savedResults}
-            filter={roundFilter}
-            expandedRound={expandedRound}
-            onFilterChange={setRoundFilter}
-            onToggleRound={(round) => setExpandedRound((current) => (current === round ? null : round))}
-            onReplayRound={onReplayRound}
-          />
           <button
             onClick={onGenerate}
             disabled={!canGenerate}
-            className="flex h-20 w-full items-center justify-center gap-2 rounded-lg bg-ink px-4 text-center font-black text-white shadow-soft disabled:bg-ink/25 lg:h-32"
+            className="flex h-20 w-full items-center justify-center gap-2 rounded-lg bg-ink px-4 text-center font-black text-white shadow-soft disabled:bg-ink/25 lg:order-2 lg:h-32"
           >
             <RefreshCw size={20} /> {canGenerate ? "Generate mock round" : "Not enough available players to generate a round."}
           </button>
-        </div>
-      ) : (
-        <div className="space-y-3 lg:grid lg:grid-cols-[0.85fr_1.15fr] lg:items-start lg:gap-4 lg:space-y-0">
-          <div className="space-y-3 lg:sticky lg:top-24">
+          <div className="lg:order-1">
             <RoundOverview
               totalRounds={totalRounds}
               currentRound={roundNumber}
@@ -3722,7 +3664,10 @@ function ActiveSessionScreen({
               onReplayRound={onReplayRound}
             />
           </div>
-          <div className="space-y-3">
+        </div>
+      ) : (
+        <div className="space-y-3 lg:grid lg:grid-cols-[0.85fr_1.15fr] lg:items-start lg:gap-4 lg:space-y-0">
+          <div className="space-y-3 lg:order-2">
             {matches.map((match) => {
               const result = resultForMatch(match);
 
@@ -3889,8 +3834,54 @@ function ActiveSessionScreen({
             </>
           )}
         </div>
+          <div className="space-y-3 lg:order-1 lg:sticky lg:top-24">
+            <RoundOverview
+              totalRounds={totalRounds}
+              currentRound={roundNumber}
+              replayRoundNumber={replayRoundNumber}
+              roundMatches={roundMatches}
+              savedResults={savedResults}
+              filter={roundFilter}
+              expandedRound={expandedRound}
+              onFilterChange={setRoundFilter}
+              onToggleRound={(round) => setExpandedRound((current) => (current === round ? null : round))}
+              onReplayRound={onReplayRound}
+            />
+          </div>
         </div>
       )}
+
+      <PlayerAvailabilitySection
+        players={selectedPlayers}
+        sessionPlayerStatuses={sessionPlayerStatuses}
+        onStatusChange={onPlayerStatusChange}
+      />
+
+      <PendingMatchesSection
+        pendingMatches={pendingReplayMatches}
+        onPlayNow={onPlayDeferredMatch}
+        onCancelMatch={onCancelDeferredMatch}
+      />
+
+      <FullSchedulePreview
+        open={schedulePreviewOpen}
+        onToggle={() => setSchedulePreviewOpen((current) => !current)}
+        currentRound={roundNumber}
+        totalRounds={totalRounds}
+        courtCount={courtCount}
+        selectedPlayers={selectedPlayers}
+        sessionPlayers={sessionPlayers}
+        participationSchedule={participationSchedule}
+        roundMatches={roundMatches}
+        savedResults={savedResults}
+        confirmRegeneration={confirmScheduleRegeneration}
+        onRequestRegeneration={() => setConfirmScheduleRegeneration(true)}
+        onCancelRegeneration={() => setConfirmScheduleRegeneration(false)}
+        onConfirmRegeneration={() => {
+          onRegenerateFutureRounds();
+          setConfirmScheduleRegeneration(false);
+        }}
+      />
       <ActiveSessionDebugPanel
         open={debugOpen}
         onToggle={() => setDebugOpen((current) => !current)}
@@ -3956,6 +3947,7 @@ function FullSchedulePreview({
   onCancelRegeneration: () => void;
   onConfirmRegeneration: () => void;
 }) {
+  const [expandedRound, setExpandedRound] = useState<number | null>(null);
   const playerLookup = new Map(selectedPlayers.map((player) => [player.id, player]));
   const activePlayerIds = new Set(sessionPlayers.map((player) => player.id));
   const scheduledMatchesForRound = (round: number) => {
@@ -4052,103 +4044,38 @@ function FullSchedulePreview({
               const status = roundStatus(round);
 
               return (
-                <div key={round} className="rounded-lg bg-mist p-3">
-                  <div className="flex items-start justify-between gap-3">
+                <div key={round} className="rounded-lg bg-mist">
+                  <button
+                    onClick={() => setExpandedRound((current) => (current === round ? null : round))}
+                    className="flex w-full items-start justify-between gap-3 px-3 py-2 text-left"
+                  >
                     <div>
                       <p className="text-sm font-black">Round {round}</p>
                       <p className="text-xs font-semibold text-ink/55">
-                        {matches.length ? `${matches.length} court${matches.length === 1 ? "" : "s"}` : "No courts scheduled"}
+                        {matches.length ? `${matches.length} court${matches.length === 1 ? "" : "s"}` : "No courts"} - Bench: {benchedPlayers.length ? benchedPlayers.map((player) => player.name.split(" ")[0]).join(", ") : "None"}
                       </p>
                     </div>
                     <span className={`rounded-full px-2 py-1 text-[11px] font-black ${statusClass(status)}`}>{status}</span>
-                  </div>
-                  <div className="mt-2 space-y-2">
-                    {matches.map((match) => (
-                      <div key={match.court} className="rounded-lg bg-white px-3 py-2">
-                        <p className="text-xs font-black">Court {match.court}</p>
-                        <p className="mt-1 truncate text-xs font-semibold text-ink/60">
-                          A: {match.teamA.map((player) => player.name.split(" ")[0]).join(" / ")}
-                        </p>
-                        <p className="truncate text-xs font-semibold text-ink/60">
-                          B: {match.teamB.map((player) => player.name.split(" ")[0]).join(" / ")}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                  <p className="mt-2 truncate text-xs font-bold text-ink/50">
-                    Bench: {benchedPlayers.length ? benchedPlayers.map((player) => player.name.split(" ")[0]).join(", ") : "None"}
-                  </p>
+                  </button>
+                  {expandedRound === round && (
+                    <div className="space-y-2 border-t border-ink/10 px-3 py-2">
+                      {matches.map((match) => (
+                        <div key={match.court} className="rounded-lg bg-white px-3 py-2">
+                          <p className="text-xs font-black">Court {match.court}</p>
+                          <p className="mt-1 truncate text-xs font-semibold text-ink/60">
+                            A: {match.teamA.map((player) => player.name.split(" ")[0]).join(" / ")}
+                          </p>
+                          <p className="truncate text-xs font-semibold text-ink/60">
+                            B: {match.teamB.map((player) => player.name.split(" ")[0]).join(" / ")}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             })}
           </div>
-        </div>
-      )}
-    </Card>
-  );
-}
-
-function UnavailablePlayersSection({
-  unavailablePlayers,
-  sessionPlayerStatuses,
-  onMarkAvailable
-}: {
-  unavailablePlayers: Player[];
-  sessionPlayerStatuses: Record<number, PlayerSessionStatus>;
-  onMarkAvailable: (id: number) => void;
-}) {
-  return (
-    <Card>
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-black">Unavailable Players</h2>
-          <p className="mt-1 text-xs font-bold text-ink/55">
-            Available players can be included in the next generated round.
-          </p>
-        </div>
-        <span className="rounded-lg bg-mist px-3 py-2 text-sm font-black">{unavailablePlayers.length}</span>
-      </div>
-
-      {unavailablePlayers.length === 0 ? (
-        <p className="mt-3 rounded-lg bg-mist px-3 py-3 text-sm font-bold text-ink/55">
-          Everyone selected is currently available.
-        </p>
-      ) : (
-        <div className="mt-3 space-y-2">
-          {unavailablePlayers.map((player) => {
-            const status = sessionPlayerStatuses[player.id] ?? "active";
-            const canMarkAvailable = status === "not_arrived" || status === "temporarily_unavailable";
-
-            return (
-              <div key={player.id} className="flex items-center justify-between gap-3 rounded-lg bg-mist px-3 py-3">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-black">{player.name}</p>
-                  <p className={`mt-1 text-xs font-black ${status === "left" ? "text-clay" : "text-court"}`}>
-                    {playerStatusLabel(status)}
-                  </p>
-                </div>
-                {canMarkAvailable ? (
-                  <button
-                    onClick={() => onMarkAvailable(player.id)}
-                    className="h-11 shrink-0 rounded-lg bg-court px-4 text-sm font-black text-white shadow-sm"
-                  >
-                    Mark Available
-                  </button>
-                ) : status === "left" ? (
-                  <button
-                    onClick={() => {
-                      if (window.confirm(`Restore ${player.name} to available for future rounds?`)) {
-                        onMarkAvailable(player.id);
-                      }
-                    }}
-                    className="h-9 shrink-0 rounded-lg bg-white px-3 text-xs font-black text-clay"
-                  >
-                    Restore
-                  </button>
-                ) : null}
-              </div>
-            );
-          })}
         </div>
       )}
     </Card>
@@ -4164,55 +4091,123 @@ function PlayerAvailabilitySection({
   sessionPlayerStatuses: Record<number, PlayerSessionStatus>;
   onStatusChange: (id: number, status: PlayerSessionStatus) => void;
 }) {
-  const statusOptions: { value: PlayerSessionStatus; label: string }[] = [
+  const [open, setOpen] = useState(false);
+  const [filter, setFilter] = useState<PlayerSessionStatus | "all">("all");
+  const statusOptions: { value: PlayerSessionStatus; label: string; shortLabel: string }[] = [
+    { value: "active", label: "Active", shortLabel: "Active" },
+    { value: "not_arrived", label: "Not Arrived", shortLabel: "Not Arrived" },
+    { value: "temporarily_unavailable", label: "Temporarily Unavailable", shortLabel: "Temp" },
+    { value: "left", label: "Left", shortLabel: "Left" }
+  ];
+  const filterOptions: { value: PlayerSessionStatus | "all"; label: string }[] = [
+    { value: "all", label: "All" },
     { value: "active", label: "Active" },
     { value: "not_arrived", label: "Not Arrived" },
-    { value: "temporarily_unavailable", label: "Temp Unavailable" },
+    { value: "temporarily_unavailable", label: "Temp" },
     { value: "left", label: "Left" }
   ];
+  const playerStatus = (player: Player) => sessionPlayerStatuses[player.id] ?? "active";
+  const counts = statusOptions.reduce<Record<PlayerSessionStatus, number>>(
+    (current, option) => ({
+      ...current,
+      [option.value]: players.filter((player) => playerStatus(player) === option.value).length
+    }),
+    { active: 0, not_arrived: 0, temporarily_unavailable: 0, left: 0 }
+  );
+  const unavailablePlayers = players.filter((player) => playerStatus(player) !== "active");
+  const filteredPlayers = filter === "all" ? players : players.filter((player) => playerStatus(player) === filter);
+  const unavailablePreview = unavailablePlayers.map((player) => player.name.split(" ")[0]).join(", ");
 
   return (
     <Card>
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-black">Player Availability</h2>
-          <p className="mt-1 text-xs font-bold text-ink/55">
-            Status changes update future rounds only. Completed rounds and saved scores stay unchanged.
+          <p className="mt-1 text-xs font-bold text-ink/55">Future rounds update when status changes.</p>
+        </div>
+        <button
+          onClick={() => setOpen((current) => !current)}
+          className="h-10 shrink-0 rounded-lg bg-ink px-3 text-xs font-black text-white"
+        >
+          {open ? "Done" : "Manage Availability"}
+        </button>
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        <StatusChip value={`Active: ${counts.active}`} tone="ready" />
+        <StatusChip value={`Not Arrived: ${counts.not_arrived}`} tone={counts.not_arrived ? "warn" : "neutral"} />
+        <StatusChip value={`Temp: ${counts.temporarily_unavailable}`} tone={counts.temporarily_unavailable ? "warn" : "neutral"} />
+        <StatusChip value={`Left: ${counts.left}`} tone={counts.left ? "warn" : "neutral"} />
+      </div>
+
+      {unavailablePlayers.length > 0 && (
+        <div className="mt-3 flex items-center justify-between gap-3 rounded-lg bg-clay/10 px-3 py-2">
+          <p className="min-w-0 truncate text-xs font-black text-clay">
+            {unavailablePlayers.length} unavailable: {unavailablePreview}
+          </p>
+          <button
+            onClick={() => setOpen(true)}
+            className="h-8 shrink-0 rounded-lg bg-white px-3 text-xs font-black text-clay"
+          >
+            Manage
+          </button>
+        </div>
+      )}
+
+      {open && (
+        <div className="mt-3 rounded-lg bg-mist p-2">
+          <div className="flex gap-1 overflow-x-auto pb-1">
+            {filterOptions.map((option) => (
+              <button
+                key={option.value}
+                onClick={() => setFilter(option.value)}
+                className={`h-8 shrink-0 rounded-lg px-3 text-[11px] font-black ${
+                  filter === option.value ? "bg-ink text-white" : "bg-white text-ink/60"
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="mt-2 divide-y divide-ink/10 overflow-hidden rounded-lg bg-white">
+            {filteredPlayers.map((player) => {
+              const status = playerStatus(player);
+
+              return (
+                <div key={player.id} className="grid grid-cols-[1fr_auto] gap-2 px-2 py-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-black">{player.name}</p>
+                    <p className={`text-[11px] font-black ${status === "active" ? "text-court" : "text-clay"}`}>
+                      {playerStatusLabel(status)}
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-4 gap-1">
+                    {statusOptions.map((option) => (
+                      <button
+                        key={option.value}
+                        onClick={() => onStatusChange(player.id, option.value)}
+                        className={`h-8 rounded-md px-1.5 text-[10px] font-black ${
+                          status === option.value ? "bg-ink text-white" : "bg-mist text-ink/60"
+                        }`}
+                      >
+                        {option.shortLabel}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+            {filteredPlayers.length === 0 && (
+              <p className="px-3 py-4 text-center text-xs font-bold text-ink/50">No players in this status.</p>
+            )}
+          </div>
+
+          <p className="mt-2 text-[11px] font-bold text-ink/45">
+            Completed rounds and saved scores stay locked. Leaderboard stats only use saved matches.
           </p>
         </div>
-        <span className="rounded-lg bg-mist px-3 py-2 text-sm font-black">{players.length}</span>
-      </div>
-
-      <div className="mt-3 space-y-3">
-        {players.map((player) => {
-          const status = sessionPlayerStatuses[player.id] ?? "active";
-
-          return (
-            <div key={player.id} className="rounded-lg bg-mist p-3">
-              <div className="flex items-center gap-3">
-                <Avatar player={player} />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-black">{player.name}</p>
-                  <p className="text-xs font-bold text-ink/50">{playerStatusLabel(status)}</p>
-                </div>
-              </div>
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                {statusOptions.map((option) => (
-                  <button
-                    key={option.value}
-                    onClick={() => onStatusChange(player.id, option.value)}
-                    className={`min-h-10 rounded-lg px-2 text-xs font-black ${
-                      status === option.value ? "bg-ink text-white" : "bg-white text-ink/60"
-                    }`}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+      )}
     </Card>
   );
 }
@@ -5733,73 +5728,82 @@ function MatchCountImbalanceCard({
   reasons: string[];
   actions: string[];
 }) {
+  const [showDetails, setShowDetails] = useState(false);
   const nameList = (players: Player[]) => players.map((player) => player.name).join(", ") || "None";
   const hasPendingReplays = pendingReplaySummaries.length > 0;
+  const primaryAction = actions[0];
 
   return (
     <div className="mt-3 rounded-lg bg-clay/10 p-3 text-clay">
-      <p className="text-sm font-black">{title}</p>
-      <div className="mt-2 grid grid-cols-3 gap-2">
-        <div className="rounded-lg bg-white/70 p-2">
-          <p className="text-lg font-black">{minMatches}</p>
-          <p className="text-[10px] font-black uppercase">Lowest</p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-black">{title}</p>
+          <p className="mt-1 text-xs font-bold">
+            Lowest {minMatches}, highest {maxMatches}, gap {gap}.
+          </p>
+          {primaryAction && <p className="mt-1 text-xs font-black">Next: {primaryAction}</p>}
         </div>
-        <div className="rounded-lg bg-white/70 p-2">
-          <p className="text-lg font-black">{maxMatches}</p>
-          <p className="text-[10px] font-black uppercase">Highest</p>
-        </div>
-        <div className="rounded-lg bg-white/70 p-2">
-          <p className="text-lg font-black">{gap}</p>
-          <p className="text-[10px] font-black uppercase">Gap</p>
-        </div>
-      </div>
-      <div className="mt-2 space-y-1 text-xs font-bold">
-        <p>Lowest: {minMatches} matches ({nameList(lowestPlayers)})</p>
-        <p>Highest: {maxMatches} matches ({nameList(highestPlayers)})</p>
-        <p>
-          {perfectDistributionPossible
-            ? `This session has ${playerCount} players, ${courtCount} court${courtCount === 1 ? "" : "s"}, and ${totalRounds} rounds, so each player should ideally play ${idealMatchesPerPlayer} matches.`
-            : `Perfect distribution is not possible with ${playerCount} players, ${courtCount} court${courtCount === 1 ? "" : "s"}, and ${totalRounds} rounds. The system will keep the gap as small as possible.`}
-        </p>
-        <p>Planned player slots: {totalPlayerSlots}. Counted player slots: {countedPlayerSlots}.</p>
-        {plannedSlotsNotCounted && (
-          <p>Not all planned slots have been counted yet.</p>
-        )}
+        <button
+          onClick={() => setShowDetails((current) => !current)}
+          className="h-8 shrink-0 rounded-lg bg-white/80 px-3 text-[11px] font-black"
+        >
+          {showDetails ? "Hide" : "Details"}
+        </button>
       </div>
       {hasPendingReplays && (
         <div className="mt-2 rounded-lg bg-white/70 p-2 text-xs font-bold">
           <p>
-            There {pendingReplaySummaries.length === 1 ? "is" : "are"} {pendingReplaySummaries.length} pending replay match{pendingReplaySummaries.length === 1 ? "" : "es"} that {pendingReplaySummaries.length === 1 ? "has" : "have"} not been completed yet.
+            {pendingReplaySummaries.length} pending replay match{pendingReplaySummaries.length === 1 ? "" : "es"} may be causing temporary imbalance.
           </p>
-          <div className="mt-1 space-y-1">
-            {pendingReplaySummaries.map((summary) => (
-              <p key={`${summary.round}-${summary.court}`}>
-                Round {summary.round} Replay: {summary.players.map((player) => player.name).join(", ")}
-              </p>
-            ))}
+        </div>
+      )}
+      {showDetails && (
+        <>
+          <div className="mt-2 space-y-1 text-xs font-bold">
+            <p>Lowest: {minMatches} matches ({nameList(lowestPlayers)})</p>
+            <p>Highest: {maxMatches} matches ({nameList(highestPlayers)})</p>
+            <p>
+              {perfectDistributionPossible
+                ? `This session has ${playerCount} players, ${courtCount} court${courtCount === 1 ? "" : "s"}, and ${totalRounds} rounds, so each player should ideally play ${idealMatchesPerPlayer} matches.`
+                : `Perfect distribution is not possible with ${playerCount} players, ${courtCount} court${courtCount === 1 ? "" : "s"}, and ${totalRounds} rounds. The system will keep the gap as small as possible.`}
+            </p>
+            <p>Planned player slots: {totalPlayerSlots}. Counted player slots: {countedPlayerSlots}.</p>
+            {plannedSlotsNotCounted && (
+              <p>Not all planned slots have been counted yet.</p>
+            )}
           </div>
-          <p className="mt-1">Complete pending replay matches first before judging final participation fairness.</p>
-        </div>
+          {hasPendingReplays && (
+            <div className="mt-2 rounded-lg bg-white/70 p-2 text-xs font-bold">
+              <div className="space-y-1">
+                {pendingReplaySummaries.map((summary) => (
+                  <p key={`${summary.round}-${summary.court}`}>
+                    Round {summary.round} Replay: {summary.players.map((player) => player.name).join(", ")}
+                  </p>
+                ))}
+              </div>
+              <p className="mt-1">Complete pending replay matches first before judging final participation fairness.</p>
+            </div>
+          )}
+          {reasons.length > 0 && (
+            <div className="mt-2">
+              <p className="text-[11px] font-black uppercase">Possible reasons</p>
+              <div className="mt-1 flex flex-wrap gap-1">
+                {reasons.map((reason) => (
+                  <span key={reason} className="rounded-full bg-white/70 px-2 py-1 text-[10px] font-black">
+                    {reason}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          {actions.length > 0 && (
+            <div className="mt-2">
+              <p className="text-[11px] font-black uppercase">Suggested action</p>
+              <p className="mt-1 text-xs font-bold">{actions.join(" ")}</p>
+            </div>
+          )}
+        </>
       )}
-      {reasons.length > 0 && (
-        <div className="mt-2">
-          <p className="text-[11px] font-black uppercase">Possible reasons</p>
-          <div className="mt-1 flex flex-wrap gap-1">
-            {reasons.map((reason) => (
-              <span key={reason} className="rounded-full bg-white/70 px-2 py-1 text-[10px] font-black">
-                {reason}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-      {actions.length > 0 && (
-        <div className="mt-2">
-          <p className="text-[11px] font-black uppercase">Suggested action</p>
-          <p className="mt-1 text-xs font-bold">{actions.join(" ")}</p>
-        </div>
-      )}
-      <p className="mt-2 text-[10px] font-bold opacity-75">Total player slots: {totalPlayerSlots}</p>
     </div>
   );
 }
