@@ -3936,29 +3936,11 @@ function ScheduleSection({
   const playerLookup = new Map(selectedPlayers.map((player) => [player.id, player]));
   const activePlayerIds = new Set(sessionPlayers.map((player) => player.id));
   const rounds = Array.from({ length: totalRounds }, (_, index) => index + 1);
-  const scheduledMatchesForRound = (round: number) => {
-    const actualMatches = roundMatches[round] ?? [];
-
-    if (actualMatches.length > 0) {
-      return actualMatches;
-    }
-
+  const plannedPlayersForRound = (round: number) => {
     const entry = participationSchedule.find((scheduleEntry) => scheduleEntry.roundNumber === round);
-    const scheduledPlayers = entry?.playingPlayerIds
+    return entry?.playingPlayerIds
       .map((id) => playerLookup.get(id))
       .filter((player): player is Player => Boolean(player && activePlayerIds.has(player.id))) ?? [];
-
-    return Array.from({ length: Math.min(courtCount, Math.floor(scheduledPlayers.length / 4)) }, (_, courtIndex) => {
-      const courtPlayers = scheduledPlayers.slice(courtIndex * 4, courtIndex * 4 + 4);
-
-      return {
-        court: courtIndex + 1,
-        teamA: courtPlayers.slice(0, 2),
-        teamB: courtPlayers.slice(2, 4),
-        scoreA: "",
-        scoreB: ""
-      };
-    }).filter((match) => match.teamA.length === 2 && match.teamB.length === 2);
   };
   const getRoundStatus = (round: number) => {
     const matches = roundMatches[round] ?? [];
@@ -4046,16 +4028,21 @@ function ScheduleSection({
       </div>
       <div className="mt-3 space-y-2">
         {visibleRounds.map((round) => {
-          const matches = scheduledMatchesForRound(round);
           const actualMatches = roundMatches[round] ?? [];
+          const plannedPlayers = plannedPlayersForRound(round);
           const status = getRoundStatus(round);
           const expanded = expandedRound === round;
           const entry = participationSchedule.find((scheduleEntry) => scheduleEntry.roundNumber === round);
-          const playingIds = new Set(matches.flatMap((match) => [...match.teamA, ...match.teamB].map((player) => player.id)));
+          const displayCourtCount = actualMatches.length || Math.min(courtCount, Math.floor(plannedPlayers.length / 4));
+          const playingIds = new Set(
+            actualMatches.length
+              ? actualMatches.flatMap((match) => [...match.teamA, ...match.teamB].map((player) => player.id))
+              : plannedPlayers.map((player) => player.id)
+          );
           const benchedPlayers = (entry?.benchedPlayerIds ?? selectedPlayers.filter((player) => !playingIds.has(player.id)).map((player) => player.id))
             .map((id) => playerLookup.get(id))
             .filter((player): player is Player => Boolean(player));
-          const isScheduledOnly = actualMatches.length === 0 && matches.length > 0;
+          const isParticipationOnly = actualMatches.length === 0 && plannedPlayers.length > 0;
           const results = actualMatches.map((match) => savedResults[matchResultKey(round, match.court)]).filter(Boolean);
           const resultLabel = replayRoundNumber === round
             ? `Round ${round} Replay`
@@ -4072,7 +4059,7 @@ function ScheduleSection({
                 <div className="min-w-0">
                   <p className="text-sm font-black">Round {round}</p>
                   <p className="truncate text-xs font-semibold text-ink/55">
-                    {matches.length ? `${matches.length} court${matches.length === 1 ? "" : "s"}` : "No courts"} - Bench: {benchedPlayers.length ? benchedPlayers.map((player) => player.name.split(" ")[0]).join(", ") : "None"}
+                    {displayCourtCount ? `${displayCourtCount} court${displayCourtCount === 1 ? "" : "s"}` : "No courts"} - Bench: {benchedPlayers.length ? benchedPlayers.map((player) => player.name.split(" ")[0]).join(", ") : "None"}
                   </p>
                 </div>
                 <span className={`shrink-0 rounded-full px-2 py-1 text-[11px] font-black ${statusClass(status)}`}>
@@ -4081,17 +4068,25 @@ function ScheduleSection({
               </button>
               {expanded && (
                 <div className="space-y-2 border-t border-ink/10 px-3 py-2">
-                  {matches.length === 0 && (
+                  {actualMatches.length === 0 && !isParticipationOnly && (
                     <p className="rounded-lg bg-white px-3 py-2 text-xs font-bold text-ink/55">
                       No teams generated yet.
                     </p>
                   )}
-                  {isScheduledOnly && (
+                  {isParticipationOnly && (
                     <p className="rounded-lg bg-white px-3 py-2 text-xs font-bold text-ink/55">
-                      Participation is planned. Teams will be finalized when this round is generated.
+                      Participation planned. Teams will be finalized when this round starts.
                     </p>
                   )}
-                  {matches.map((match) => {
+                  {isParticipationOnly && (
+                    <div className="rounded-lg bg-white px-3 py-2">
+                      <p className="text-xs font-black">Playing players</p>
+                      <p className="mt-1 text-xs font-semibold text-ink/60">
+                        {plannedPlayers.map((player) => player.name).join(", ")}
+                      </p>
+                    </div>
+                  )}
+                  {actualMatches.map((match) => {
                     const result = savedResults[matchResultKey(round, match.court)];
                     const score = result ? matchScoreLabel(result) : "N/A";
                     const pendingReplay = result?.status === "deferred" || result?.status === "skipped_not_started";
@@ -4109,7 +4104,7 @@ function ScheduleSection({
                           B: {match.teamB.map((player) => player.name.split(" ")[0]).join(" / ")}
                         </p>
                         <p className="mt-1 text-[11px] font-black text-ink/45">
-                          Status: {result ? matchStatusLabel(result) : isScheduledOnly ? "Scheduled" : "Not Started"}
+                          Status: {result ? matchStatusLabel(result) : "Not Started"}
                         </p>
                         {pendingReplay && (
                           <div className="mt-2 grid grid-cols-2 gap-2">
