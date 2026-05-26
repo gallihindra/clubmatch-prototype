@@ -2466,6 +2466,7 @@ export default function ClubApp() {
             onPlayerChange={updateMatchPlayer}
             onMarkLeft={markPlayerLeft}
             onMarkAvailable={(id) => updatePlayerSessionStatus(id, "active")}
+            onPlayerStatusChange={updatePlayerSessionStatus}
             onSaveResult={(match) => saveMatchResult(match)}
             onSkipResult={(match, status, unavailableIds, unavailableStatus) =>
               saveMatchResult(match, status, unavailableIds, unavailableStatus)
@@ -3324,6 +3325,7 @@ function ActiveSessionScreen({
   onPlayerChange,
   onMarkLeft,
   onMarkAvailable,
+  onPlayerStatusChange,
   onSaveResult,
   onSkipResult,
   onClearResult,
@@ -3365,6 +3367,7 @@ function ActiveSessionScreen({
   onPlayerChange: (court: number, team: "teamA" | "teamB", playerIndex: number, playerId: number) => void;
   onMarkLeft: (id: number) => void;
   onMarkAvailable: (id: number) => void;
+  onPlayerStatusChange: (id: number, status: PlayerSessionStatus) => void;
   onSaveResult: (match: Match) => void;
   onSkipResult: (
     match: Match,
@@ -3424,8 +3427,8 @@ function ActiveSessionScreen({
   });
   const sessionCompleted = !isReplayMode && isFinalRound && allResultsResolved && pendingDeferredMatches.length === 0;
   const plannedRoundsResolved = !isReplayMode && isFinalRound && allResultsResolved;
-  const completedRounds = Math.max(0, Math.min(totalRounds, roundNumber - (allResultsResolved ? 0 : 1)));
-  const progressPercent = totalRounds > 0 ? Math.min((completedRounds / totalRounds) * 100, 100) : 0;
+  const resolvedRounds = Math.max(0, Math.min(totalRounds, roundNumber - (allResultsResolved ? 0 : 1)));
+  const progressPercent = totalRounds > 0 ? Math.min((resolvedRounds / totalRounds) * 100, 100) : 0;
   const activeCourtCount = matches.length || Math.min(courtCount, Math.floor(sessionPlayers.length / 4));
   const roundStatusText = isReplayMode ? "Replay in progress" : allResultsResolved ? "Ready for next round" : "Round in progress";
   const formatMismatchInCurrentRound = doublesFormat === "open" && avoidFormatMismatch && matches.some(hasDoublesFormatMismatch);
@@ -3525,7 +3528,7 @@ function ActiveSessionScreen({
             <h2 className="mt-2 text-2xl font-black leading-tight">
               {isReplayMode ? `Round ${activeReplay?.round} Replay` : `Round ${roundNumber} of ${totalRounds}`}
             </h2>
-            <p className="mt-1 text-xs font-bold text-ink/55">{completedRounds} of {totalRounds} rounds completed</p>
+            <p className="mt-1 text-xs font-bold text-ink/55">{resolvedRounds} of {totalRounds} rounds resolved</p>
           </div>
           <button
             onClick={onGenerate}
@@ -3655,6 +3658,12 @@ function ActiveSessionScreen({
           onMarkAvailable={onMarkAvailable}
         />
       )}
+
+      <PlayerAvailabilitySection
+        players={selectedPlayers}
+        sessionPlayerStatuses={sessionPlayerStatuses}
+        onStatusChange={onPlayerStatusChange}
+      />
 
       <PendingMatchesSection
         deferredMatches={deferredMatches}
@@ -3817,7 +3826,7 @@ function ActiveSessionScreen({
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <h3 className="font-black">Add rounds</h3>
-                      <p className="text-xs font-semibold text-ink/55">Current progress: {completedRounds} of {totalRounds} rounds completed</p>
+                      <p className="text-xs font-semibold text-ink/55">Current progress: {resolvedRounds} of {totalRounds} rounds resolved</p>
                     </div>
                     <button
                       onClick={() => setShowAddRounds(false)}
@@ -4149,6 +4158,68 @@ function UnavailablePlayersSection({
           })}
         </div>
       )}
+    </Card>
+  );
+}
+
+function PlayerAvailabilitySection({
+  players,
+  sessionPlayerStatuses,
+  onStatusChange
+}: {
+  players: Player[];
+  sessionPlayerStatuses: Record<number, PlayerSessionStatus>;
+  onStatusChange: (id: number, status: PlayerSessionStatus) => void;
+}) {
+  const statusOptions: { value: PlayerSessionStatus; label: string }[] = [
+    { value: "active", label: "Active" },
+    { value: "not_arrived", label: "Not Arrived" },
+    { value: "temporarily_unavailable", label: "Temp Unavailable" },
+    { value: "left", label: "Left" }
+  ];
+
+  return (
+    <Card>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-black">Player Availability</h2>
+          <p className="mt-1 text-xs font-bold text-ink/55">
+            Status changes update future rounds only. Completed rounds and saved scores stay unchanged.
+          </p>
+        </div>
+        <span className="rounded-lg bg-mist px-3 py-2 text-sm font-black">{players.length}</span>
+      </div>
+
+      <div className="mt-3 space-y-3">
+        {players.map((player) => {
+          const status = sessionPlayerStatuses[player.id] ?? "active";
+
+          return (
+            <div key={player.id} className="rounded-lg bg-mist p-3">
+              <div className="flex items-center gap-3">
+                <Avatar player={player} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-black">{player.name}</p>
+                  <p className="text-xs font-bold text-ink/50">{playerStatusLabel(status)}</p>
+                </div>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                {statusOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    onClick={() => onStatusChange(player.id, option.value)}
+                    className={`min-h-10 rounded-lg px-2 text-xs font-black ${
+                      status === option.value ? "bg-ink text-white" : "bg-white text-ink/60"
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </Card>
   );
 }
