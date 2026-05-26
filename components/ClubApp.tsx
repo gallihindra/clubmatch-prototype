@@ -3797,6 +3797,7 @@ function ActiveSessionScreen({
                   leftPlayerIds={leftPlayerIds}
                   scoreTarget={scoreTarget}
                   allowExtraPoints={allowExtraPoints}
+                  resultRound={activeResultRound}
                   onScore={onScore}
                   onPlayerChange={onPlayerChange}
                   onMarkLeft={onMarkLeft}
@@ -3804,6 +3805,7 @@ function ActiveSessionScreen({
                   onUpdateSavedScore={onUpdateSavedScore}
                   onSkipResult={onSkipResult}
                   onPlayLater={(matchToDefer) => onSkipResult(matchToDefer, "deferred")}
+                  onPlayReplay={onPlayDeferredMatch}
                   onClearResult={onClearResult}
                 />
               );
@@ -5359,9 +5361,11 @@ function CourtCard({
   onUpdateSavedScore,
   onSkipResult,
   onPlayLater,
+  onPlayReplay,
   onClearResult,
   scoreTarget,
-  allowExtraPoints
+  allowExtraPoints,
+  resultRound
 }: {
   match: Match;
   result?: SavedMatchResult;
@@ -5382,9 +5386,11 @@ function CourtCard({
     unavailableStatus?: "not_arrived" | "temporarily_unavailable"
   ) => void;
   onPlayLater: (match: Match) => void;
+  onPlayReplay: (round: number, court: number) => void;
   onClearResult: (match: Match) => void;
   scoreTarget: number;
   allowExtraPoints: boolean;
+  resultRound: number;
 }) {
   const [skipMenuOpen, setSkipMenuOpen] = useState(false);
   const [notReadyIds, setNotReadyIds] = useState<number[]>([]);
@@ -5398,8 +5404,12 @@ function CourtCard({
   const matchPlayers = [...match.teamA, ...match.teamB];
   const statusLabel = matchStatusLabel(result);
   const playedResult = isPlayedResult(result);
+  const skippedOrCancelled = result?.status === "skipped_result" || result?.status === "skipped_not_started" || result?.status === "cancelled";
+  const deferredResult = result?.status === "deferred";
+  const resolvedNotPlayed = Boolean(result && !playedResult);
   const scoreLockedLabel = result && !playedResult ? "N/A" : undefined;
   const scoresEditable = !saved || (playedResult && editingScore);
+  const showOperationalControls = !saved && !editingScore;
   const toggleNotReady = (id: number) => {
     setNotReadyIds((current) =>
       current.includes(id) ? current.filter((playerId) => playerId !== id) : [...current, id]
@@ -5408,20 +5418,29 @@ function CourtCard({
 
   return (
     <Card>
-      <div className="mb-2 flex items-center justify-between">
+      <div className="mb-2 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <h2 className="text-lg font-black">Court {match.court}</h2>
           {isRematch && (
             <span className="rounded-full bg-clay/10 px-2 py-1 text-[11px] font-black text-clay">Rematch</span>
           )}
         </div>
-        <span className={`rounded-full px-3 py-1 text-xs font-bold ${saved ? "bg-lime" : "bg-mist"}`}>
-          {saved ? statusLabel : "Doubles"}
+        <span className={`rounded-full px-3 py-1 text-xs font-black ${
+          playedResult ? "bg-lime text-ink" : skippedOrCancelled ? "bg-clay/10 text-clay" : deferredResult ? "bg-court/10 text-court" : "bg-mist text-ink/60"
+        }`}>
+          {saved ? statusLabel : "Not started"}
         </span>
       </div>
-      <p className="mb-2 rounded-lg bg-mist px-2 py-1 text-[11px] font-bold text-ink/55">
-        Match status: {statusLabel}
-      </p>
+      {resolvedNotPlayed && (
+        <div className={`mb-2 rounded-lg px-3 py-2 ${deferredResult ? "bg-court/10 text-court" : "bg-clay/10 text-clay"}`}>
+          <p className="text-xs font-black">
+            {deferredResult ? "Play Later - pending replay" : statusLabel}
+          </p>
+          <p className="mt-0.5 text-[11px] font-bold">
+            Not played - no leaderboard stats updated.
+          </p>
+        </div>
+      )}
       <ScoreRow
         court={match.court}
         team="teamA"
@@ -5457,10 +5476,11 @@ function CourtCard({
         onPlayerChange={onPlayerChange}
         onMarkLeft={onMarkLeft}
       />
+      {showOperationalControls && (
       <div className="mt-3 grid grid-cols-2 gap-2">
         <button
           onClick={() => setEditingPlayers((current) => !current)}
-          disabled={saved || isReplayMode || editingScore}
+          disabled={isReplayMode}
           className="h-10 rounded-lg bg-mist px-2 text-xs font-black text-ink disabled:text-ink/25"
         >
           {editingPlayers ? "Done editing" : "Edit players"}
@@ -5471,7 +5491,6 @@ function CourtCard({
             setSkipMenuOpen(false);
             setEditingPlayers(false);
           }}
-          disabled={saved || editingScore}
           className="h-10 rounded-lg bg-mist px-2 text-xs font-black text-ink disabled:text-ink/25"
         >
           Play Later
@@ -5485,19 +5504,19 @@ function CourtCard({
             setSkipMenuOpen((current) => !current);
             setEditingPlayers(false);
           }}
-          disabled={saved || editingScore}
           className="h-10 rounded-lg bg-mist px-2 text-xs font-black text-ink disabled:text-ink/25"
         >
           Skip
         </button>
         <button
           onClick={() => onSaveResult(match)}
-          disabled={saved || editingScore || !canSave}
+          disabled={!canSave}
           className="h-10 rounded-lg bg-ink px-2 text-xs font-black text-white disabled:bg-ink/25"
         >
-          {saved ? "Saved" : "Save Result"}
+          Save Result
         </button>
       </div>
+      )}
       {skipMenuOpen && !saved && (
         <div className="mt-2 rounded-lg bg-mist p-2">
           <p className="text-sm font-black">Skip reason</p>
@@ -5564,11 +5583,6 @@ function CourtCard({
           </div>
         </div>
       )}
-      {saved && (
-        <p className="mt-2 rounded-lg bg-mist px-3 py-2 text-center text-xs font-black text-ink/55">
-          {playedResult ? `Final score ${matchScoreLabel(result)}` : `${matchScoreLabel(result)} - no leaderboard stats updated`}
-        </p>
-      )}
       {saved && playedResult && !editingScore && (
         <button
           onClick={() => {
@@ -5578,7 +5592,7 @@ function CourtCard({
             setEditingPlayers(false);
             setSkipMenuOpen(false);
           }}
-          className="mt-2 h-11 w-full rounded-lg bg-court text-sm font-black text-white"
+          className="mt-2 h-9 rounded-lg bg-mist px-3 text-xs font-black text-ink/70"
         >
           Edit Score
         </button>
@@ -5609,13 +5623,23 @@ function CourtCard({
           </button>
         </div>
       )}
-      {saved && !playedResult && (
-        <button
-          onClick={() => onClearResult(match)}
-          className="mt-2 h-11 w-full rounded-lg bg-clay/10 text-sm font-black text-clay"
-        >
-          Clear result to edit match
-        </button>
+      {resolvedNotPlayed && (
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          {(deferredResult || result?.status === "skipped_not_started") && (
+            <button
+              onClick={() => onPlayReplay(resultRound, match.court)}
+              className="h-10 rounded-lg bg-court px-2 text-xs font-black text-white"
+            >
+              Round {resultRound} Replay
+            </button>
+          )}
+          <button
+            onClick={() => onClearResult(match)}
+            className="h-10 rounded-lg bg-mist px-2 text-xs font-black text-ink/70"
+          >
+            Clear status
+          </button>
+        </div>
       )}
     </Card>
   );
@@ -5672,10 +5696,12 @@ function ScoreRow({
             {players.map((player) => `${player.tier} ${player.rating.toFixed(1)}`).join(" + ")}
           </p>
         </div>
-        {scoreLockedLabel ? (
+        {scoreLockedLabel || saved ? (
           <div className="flex min-h-12 min-w-20 flex-col items-center justify-center rounded-lg border border-ink/10 bg-mist px-3 text-center text-ink/40">
             <span className="text-[9px] font-black uppercase leading-none">Score</span>
-            <span className="mt-0.5 text-xs font-black">{scoreLockedLabel}</span>
+            <span className={`mt-0.5 font-black leading-none ${scoreLockedLabel ? "text-xs" : "text-2xl text-ink/70"}`}>
+              {scoreLockedLabel ?? currentScore}
+            </span>
           </div>
         ) : (
           <button
