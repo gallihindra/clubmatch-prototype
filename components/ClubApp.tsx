@@ -2334,9 +2334,9 @@ export default function ClubApp() {
   };
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-md flex-col pb-24">
+    <main className="mx-auto flex min-h-screen w-full max-w-md flex-col pb-24 md:max-w-3xl lg:max-w-6xl lg:pb-28 xl:max-w-7xl">
       <Header screen={screen} />
-      <section className="flex-1 px-4 pt-3">
+      <section className="flex-1 px-4 pt-3 md:px-6 lg:px-8">
         {screen === "home" && (
           <HomeScreen
             selectedPlayers={selectedPlayers}
@@ -2446,7 +2446,7 @@ export default function ClubApp() {
           />
         )}
       </section>
-      <nav className="fixed inset-x-0 bottom-0 z-10 mx-auto max-w-md border-t border-ink/10 bg-white/95 px-3 py-2 shadow-soft backdrop-blur">
+      <nav className="fixed inset-x-0 bottom-0 z-10 mx-auto max-w-md border-t border-ink/10 bg-white/95 px-3 py-2 shadow-soft backdrop-blur md:max-w-3xl lg:bottom-4 lg:max-w-4xl lg:rounded-lg lg:border">
         <div className="grid grid-cols-5 gap-1">
           {navItems.map((item) => {
             const Icon = item.icon;
@@ -2481,7 +2481,7 @@ function Header({ screen }: { screen: Screen }) {
   }[screen];
 
   return (
-    <header className="sticky top-0 z-10 bg-mist/90 px-4 pb-2 pt-4 backdrop-blur">
+    <header className="sticky top-0 z-10 bg-mist/90 px-4 pb-2 pt-4 backdrop-blur md:px-6 lg:px-8">
       <div className="flex items-center justify-between">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-court">Early Prototype</p>
@@ -2508,8 +2508,8 @@ function HomeScreen({
   onActiveSession: () => void;
 }) {
   return (
-    <div className="space-y-4">
-      <section className="rounded-lg bg-ink p-5 text-white shadow-soft">
+    <div className="space-y-4 lg:grid lg:grid-cols-[1fr_1fr] lg:items-start lg:gap-4 lg:space-y-0">
+      <section className="rounded-lg bg-ink p-5 text-white shadow-soft md:p-6 lg:col-span-2">
         <p className="text-sm font-semibold text-lime">Live club night</p>
         <h2 className="mt-2 text-3xl font-black leading-tight">Match players fast between rounds.</h2>
         <div className="mt-5 grid grid-cols-3 gap-2 text-center">
@@ -2530,17 +2530,19 @@ function HomeScreen({
         </button>
       </div>
 
+      <div className="lg:col-span-2">
       <Card>
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-black">Selected now</h2>
           <span className="rounded-full bg-lime px-3 py-1 text-xs font-bold">{selectedPlayers.length} players</span>
         </div>
-        <div className="mt-4 space-y-3">
+        <div className="mt-4 space-y-3 md:grid md:grid-cols-2 md:gap-3 md:space-y-0">
           {selectedPlayers.slice(0, 4).map((player) => (
             <PlayerRow key={player.id} player={player} compact />
           ))}
         </div>
       </Card>
+      </div>
     </div>
   );
 }
@@ -2748,49 +2750,51 @@ function PlayersScreen({
         </Card>
       )}
 
-      {players.map((player) => (
-        <Card key={player.id}>
-          <div className="flex items-center gap-3">
-            <Avatar player={player} />
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center justify-between gap-2">
-                <h2 className="truncate text-base font-black">{player.name}</h2>
-                <span className="rounded-full bg-mist px-2 py-1 text-xs font-black">Tier {player.tier}</span>
+      <div className="space-y-3 md:grid md:grid-cols-2 md:gap-3 md:space-y-0 xl:grid-cols-3">
+        {players.map((player) => (
+          <Card key={player.id}>
+            <div className="flex items-center gap-3">
+              <Avatar player={player} />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between gap-2">
+                  <h2 className="truncate text-base font-black">{player.name}</h2>
+                  <span className="rounded-full bg-mist px-2 py-1 text-xs font-black">Tier {player.tier}</span>
+                </div>
+                <p className="mt-1 text-sm text-ink/60">
+                  {player.rating.toFixed(1)} - {player.style} - {coerceGenderCategory(player.genderCategory) === "male" ? "Male" : "Female"}
+                </p>
               </div>
-              <p className="mt-1 text-sm text-ink/60">
-                {player.rating.toFixed(1)} - {player.style} - {coerceGenderCategory(player.genderCategory) === "male" ? "Male" : "Female"}
-              </p>
             </div>
-          </div>
-          <div className="mt-4 grid grid-cols-4 gap-2">
-            <button
-              onClick={() => onToggle(player.id)}
-              className={`flex h-10 items-center justify-center rounded-lg text-sm font-black ${
-                selectedIds.includes(player.id) ? "bg-court text-white" : "bg-mist text-ink/55"
-              }`}
-            >
-              {selectedIds.includes(player.id) ? "Selected" : "Select"}
-            </button>
-            <button
-              onClick={() => openEditPlayer(player)}
-              className="flex h-10 items-center justify-center rounded-lg bg-mist text-ink"
-              aria-label={`Edit ${player.name}`}
-            >
-              <Pencil size={18} />
-            </button>
-            <button
-              onClick={() => onDeletePlayer(player.id)}
-              className="flex h-10 items-center justify-center rounded-lg bg-clay/10 text-clay"
-              aria-label={`Delete ${player.name}`}
-            >
-              <Trash2 size={18} />
-            </button>
-            <div className="flex h-10 items-center justify-center rounded-lg bg-lime text-sm font-black">
-              {player.initials}
+            <div className="mt-4 grid grid-cols-4 gap-2">
+              <button
+                onClick={() => onToggle(player.id)}
+                className={`flex h-10 items-center justify-center rounded-lg text-sm font-black ${
+                  selectedIds.includes(player.id) ? "bg-court text-white" : "bg-mist text-ink/55"
+                }`}
+              >
+                {selectedIds.includes(player.id) ? "Selected" : "Select"}
+              </button>
+              <button
+                onClick={() => openEditPlayer(player)}
+                className="flex h-10 items-center justify-center rounded-lg bg-mist text-ink"
+                aria-label={`Edit ${player.name}`}
+              >
+                <Pencil size={18} />
+              </button>
+              <button
+                onClick={() => onDeletePlayer(player.id)}
+                className="flex h-10 items-center justify-center rounded-lg bg-clay/10 text-clay"
+                aria-label={`Delete ${player.name}`}
+              >
+                <Trash2 size={18} />
+              </button>
+              <div className="flex h-10 items-center justify-center rounded-lg bg-lime text-sm font-black">
+                {player.initials}
+              </div>
             </div>
-          </div>
-        </Card>
-      ))}
+          </Card>
+        ))}
+      </div>
     </div>
   );
 }
@@ -2894,7 +2898,7 @@ function NewSessionScreen({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 lg:grid lg:grid-cols-2 lg:items-start lg:gap-4 lg:space-y-0">
       <Card>
         <div className="flex items-center justify-between">
           <div>
@@ -3054,7 +3058,7 @@ function NewSessionScreen({
         )}
       </Card>
 
-      <div className="space-y-3">
+      <div className="space-y-3 md:grid md:grid-cols-2 md:gap-3 md:space-y-0 lg:col-span-2 lg:grid-cols-3">
         {players.map((player) => (
           <button
             key={player.id}
@@ -3599,29 +3603,7 @@ function ActiveSessionScreen({
       />
 
       {matches.length === 0 ? (
-        <>
-        <RoundOverview
-          totalRounds={totalRounds}
-          currentRound={roundNumber}
-          replayRoundNumber={replayRoundNumber}
-          roundMatches={roundMatches}
-          savedResults={savedResults}
-          filter={roundFilter}
-          expandedRound={expandedRound}
-          onFilterChange={setRoundFilter}
-          onToggleRound={(round) => setExpandedRound((current) => (current === round ? null : round))}
-          onReplayRound={onReplayRound}
-        />
-        <button
-          onClick={onGenerate}
-          disabled={!canGenerate}
-          className="flex h-20 w-full items-center justify-center gap-2 rounded-lg bg-ink px-4 text-center font-black text-white shadow-soft disabled:bg-ink/25"
-        >
-          <RefreshCw size={20} /> {canGenerate ? "Generate mock round" : "Not enough available players to generate a round."}
-        </button>
-        </>
-      ) : (
-        <div className="space-y-3">
+        <div className="space-y-3 lg:grid lg:grid-cols-[0.85fr_1.15fr] lg:items-start lg:gap-4 lg:space-y-0">
           <RoundOverview
             totalRounds={totalRounds}
             currentRound={roundNumber}
@@ -3634,29 +3616,54 @@ function ActiveSessionScreen({
             onToggleRound={(round) => setExpandedRound((current) => (current === round ? null : round))}
             onReplayRound={onReplayRound}
           />
-          {matches.map((match) => {
-            const result = resultForMatch(match);
+          <button
+            onClick={onGenerate}
+            disabled={!canGenerate}
+            className="flex h-20 w-full items-center justify-center gap-2 rounded-lg bg-ink px-4 text-center font-black text-white shadow-soft disabled:bg-ink/25 lg:h-32"
+          >
+            <RefreshCw size={20} /> {canGenerate ? "Generate mock round" : "Not enough available players to generate a round."}
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-3 lg:grid lg:grid-cols-[0.85fr_1.15fr] lg:items-start lg:gap-4 lg:space-y-0">
+          <div className="space-y-3 lg:sticky lg:top-24">
+            <RoundOverview
+              totalRounds={totalRounds}
+              currentRound={roundNumber}
+              replayRoundNumber={replayRoundNumber}
+              roundMatches={roundMatches}
+              savedResults={savedResults}
+              filter={roundFilter}
+              expandedRound={expandedRound}
+              onFilterChange={setRoundFilter}
+              onToggleRound={(round) => setExpandedRound((current) => (current === round ? null : round))}
+              onReplayRound={onReplayRound}
+            />
+          </div>
+          <div className="space-y-3">
+            {matches.map((match) => {
+              const result = resultForMatch(match);
 
-            return (
-              <CourtCard
-                key={match.court}
-                match={match}
-                result={result}
-                saved={isResolvedResult(result)}
-                isRematch={generatedHistoryBeforeCurrentRound.exactMatchKeys.includes(exactMatchKey(match.teamA, match.teamB))}
-                isReplayMode={isReplayMode}
-                availablePlayers={sessionPlayers}
-                leftPlayerIds={leftPlayerIds}
-                onScore={onScore}
-                onPlayerChange={onPlayerChange}
-                onMarkLeft={onMarkLeft}
-                onSaveResult={onSaveResult}
-                onSkipResult={onSkipResult}
-                onPlayLater={(matchToDefer) => onSkipResult(matchToDefer, "deferred")}
-                onClearResult={onClearResult}
-              />
-            );
-          })}
+              return (
+                <CourtCard
+                  key={match.court}
+                  match={match}
+                  result={result}
+                  saved={isResolvedResult(result)}
+                  isRematch={generatedHistoryBeforeCurrentRound.exactMatchKeys.includes(exactMatchKey(match.teamA, match.teamB))}
+                  isReplayMode={isReplayMode}
+                  availablePlayers={sessionPlayers}
+                  leftPlayerIds={leftPlayerIds}
+                  onScore={onScore}
+                  onPlayerChange={onPlayerChange}
+                  onMarkLeft={onMarkLeft}
+                  onSaveResult={onSaveResult}
+                  onSkipResult={onSkipResult}
+                  onPlayLater={(matchToDefer) => onSkipResult(matchToDefer, "deferred")}
+                  onClearResult={onClearResult}
+                />
+              );
+            })}
           {plannedRoundsResolved && deferredMatches.length > 0 && !sessionEnded ? (
             <Card>
               <div className="text-center">
@@ -3799,6 +3806,7 @@ function ActiveSessionScreen({
             )}
             </>
           )}
+        </div>
         </div>
       )}
       <ActiveSessionDebugPanel
@@ -5081,6 +5089,7 @@ function LeaderboardScreen({
           </div>
         )}
       </Card>
+      <div className="space-y-3 lg:col-span-2 lg:grid lg:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)] lg:items-start lg:gap-4 lg:space-y-0">
       {!hasCurrentStats && (
         <Card>
           <p className="text-sm font-bold text-ink/60">
@@ -5144,6 +5153,7 @@ function LeaderboardScreen({
           courtCount={courtCount}
         />
       )}
+      </div>
       {fullscreenOpen && (
         <div className="fixed inset-0 z-50 bg-mist">
           <div className="mx-auto flex h-screen w-full max-w-5xl flex-col">
@@ -5350,7 +5360,7 @@ function StandingsTable({
 }
 
 function Card({ children }: { children: React.ReactNode }) {
-  return <section className="rounded-lg bg-white p-4 shadow-soft">{children}</section>;
+  return <section className="rounded-lg bg-white p-4 shadow-soft md:p-5">{children}</section>;
 }
 
 function Stat({ label, value, dark = false }: { label: string; value: string; dark?: boolean }) {
