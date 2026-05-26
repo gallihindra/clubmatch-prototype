@@ -2303,6 +2303,48 @@ export default function ClubApp() {
     }));
   };
 
+  const updateSavedMatchScore = (match: Match) => {
+    const resultRound = activeReplay?.round ?? roundNumber;
+    const key = matchResultKey(resultRound, match.court);
+    const savedResult = savedResults[key];
+    const scoreA = match.scoreA === "" ? 0 : Number(match.scoreA);
+    const scoreB = match.scoreB === "" ? 0 : Number(match.scoreB);
+
+    if (!isPlayedResult(savedResult) || !Number.isFinite(scoreA) || !Number.isFinite(scoreB) || scoreA === scoreB) {
+      return;
+    }
+
+    setRoundMatches((current) => ({
+      ...current,
+      [resultRound]: (current[resultRound] ?? matches).map((currentMatch) =>
+        currentMatch.court === match.court ? { ...currentMatch, scoreA: String(scoreA), scoreB: String(scoreB) } : currentMatch
+      )
+    }));
+    setMatches((current) =>
+      current.map((currentMatch) =>
+        currentMatch.court === match.court ? { ...currentMatch, scoreA: String(scoreA), scoreB: String(scoreB) } : currentMatch
+      )
+    );
+    setSavedResults((current) => {
+      const next = {
+        ...current,
+        [key]: {
+          ...savedResult,
+          skipped: false,
+          status: "saved" as MatchResultStatus,
+          teamAIds: match.teamA.map((player) => player.id),
+          teamBIds: match.teamB.map((player) => player.id),
+          scoreA,
+          scoreB
+        }
+      };
+      const recalculated = getSessionStatsFromMatches({ players: selectedPlayers, roundMatches, savedResults: next });
+      setSessionStats(recalculated.stats);
+      setCompletedSessionStored(false);
+      return next;
+    });
+  };
+
   const clearMatchResult = (match: Match) => {
     const key = matchResultKey(activeReplay?.round ?? roundNumber, match.court);
     const savedResult = savedResults[key];
@@ -2453,6 +2495,7 @@ export default function ClubApp() {
             onMarkLeft={markPlayerLeft}
             onPlayerStatusChange={updatePlayerSessionStatus}
             onSaveResult={(match) => saveMatchResult(match)}
+            onUpdateSavedScore={updateSavedMatchScore}
             onSkipResult={(match, status, unavailableIds, unavailableStatus) =>
               saveMatchResult(match, status, unavailableIds, unavailableStatus)
             }
@@ -3373,6 +3416,7 @@ function ActiveSessionScreen({
   onMarkLeft,
   onPlayerStatusChange,
   onSaveResult,
+  onUpdateSavedScore,
   onSkipResult,
   onClearResult,
   onPlayDeferredMatch,
@@ -3415,6 +3459,7 @@ function ActiveSessionScreen({
   onMarkLeft: (id: number) => void;
   onPlayerStatusChange: (id: number, status: PlayerSessionStatus) => void;
   onSaveResult: (match: Match) => void;
+  onUpdateSavedScore: (match: Match) => void;
   onSkipResult: (
     match: Match,
     status: MatchResultStatus,
@@ -3756,6 +3801,7 @@ function ActiveSessionScreen({
                   onPlayerChange={onPlayerChange}
                   onMarkLeft={onMarkLeft}
                   onSaveResult={onSaveResult}
+                  onUpdateSavedScore={onUpdateSavedScore}
                   onSkipResult={onSkipResult}
                   onPlayLater={(matchToDefer) => onSkipResult(matchToDefer, "deferred")}
                   onClearResult={onClearResult}
@@ -5310,6 +5356,7 @@ function CourtCard({
   onPlayerChange,
   onMarkLeft,
   onSaveResult,
+  onUpdateSavedScore,
   onSkipResult,
   onPlayLater,
   onClearResult,
@@ -5327,6 +5374,7 @@ function CourtCard({
   onPlayerChange: (court: number, team: "teamA" | "teamB", playerIndex: number, playerId: number) => void;
   onMarkLeft: (id: number) => void;
   onSaveResult: (match: Match) => void;
+  onUpdateSavedScore: (match: Match) => void;
   onSkipResult: (
     match: Match,
     status: MatchResultStatus,
@@ -5341,14 +5389,17 @@ function CourtCard({
   const [skipMenuOpen, setSkipMenuOpen] = useState(false);
   const [notReadyIds, setNotReadyIds] = useState<number[]>([]);
   const [editingPlayers, setEditingPlayers] = useState(false);
+  const [editingScore, setEditingScore] = useState(false);
   const [unavailableStatus, setUnavailableStatus] = useState<"not_arrived" | "temporarily_unavailable">("not_arrived");
   const teamAScore = scoreValue(match.scoreA);
   const teamBScore = scoreValue(match.scoreB);
-  const canSave = teamAScore !== teamBScore && (allowExtraPoints || (teamAScore <= scoreTarget && teamBScore <= scoreTarget));
+  const maxAllowedScore = scoreTarget + (allowExtraPoints ? 5 : 0);
+  const canSave = teamAScore !== teamBScore && teamAScore <= maxAllowedScore && teamBScore <= maxAllowedScore;
   const matchPlayers = [...match.teamA, ...match.teamB];
   const statusLabel = matchStatusLabel(result);
   const playedResult = isPlayedResult(result);
   const scoreLockedLabel = result && !playedResult ? "N/A" : undefined;
+  const scoresEditable = !saved || (playedResult && editingScore);
   const toggleNotReady = (id: number) => {
     setNotReadyIds((current) =>
       current.includes(id) ? current.filter((playerId) => playerId !== id) : [...current, id]
@@ -5377,7 +5428,7 @@ function CourtCard({
         label="A"
         players={match.teamA}
         score={match.scoreA}
-        saved={saved}
+        saved={!scoresEditable}
         scoreLockedLabel={scoreLockedLabel}
         editing={editingPlayers && !saved}
         availablePlayers={availablePlayers}
@@ -5395,7 +5446,7 @@ function CourtCard({
         label="B"
         players={match.teamB}
         score={match.scoreB}
-        saved={saved}
+        saved={!scoresEditable}
         scoreLockedLabel={scoreLockedLabel}
         editing={editingPlayers && !saved}
         availablePlayers={availablePlayers}
@@ -5409,7 +5460,7 @@ function CourtCard({
       <div className="mt-3 grid grid-cols-2 gap-2">
         <button
           onClick={() => setEditingPlayers((current) => !current)}
-          disabled={saved || isReplayMode}
+          disabled={saved || isReplayMode || editingScore}
           className="h-10 rounded-lg bg-mist px-2 text-xs font-black text-ink disabled:text-ink/25"
         >
           {editingPlayers ? "Done editing" : "Edit players"}
@@ -5420,7 +5471,7 @@ function CourtCard({
             setSkipMenuOpen(false);
             setEditingPlayers(false);
           }}
-          disabled={saved}
+          disabled={saved || editingScore}
           className="h-10 rounded-lg bg-mist px-2 text-xs font-black text-ink disabled:text-ink/25"
         >
           Play Later
@@ -5434,14 +5485,14 @@ function CourtCard({
             setSkipMenuOpen((current) => !current);
             setEditingPlayers(false);
           }}
-          disabled={saved}
+          disabled={saved || editingScore}
           className="h-10 rounded-lg bg-mist px-2 text-xs font-black text-ink disabled:text-ink/25"
         >
           Skip
         </button>
         <button
           onClick={() => onSaveResult(match)}
-          disabled={saved || !canSave}
+          disabled={saved || editingScore || !canSave}
           className="h-10 rounded-lg bg-ink px-2 text-xs font-black text-white disabled:bg-ink/25"
         >
           {saved ? "Saved" : "Save Result"}
@@ -5518,7 +5569,47 @@ function CourtCard({
           {playedResult ? `Final score ${matchScoreLabel(result)}` : `${matchScoreLabel(result)} - no leaderboard stats updated`}
         </p>
       )}
-      {saved && (
+      {saved && playedResult && !editingScore && (
+        <button
+          onClick={() => {
+            onScore(match.court, "scoreA", String(result?.scoreA ?? teamAScore));
+            onScore(match.court, "scoreB", String(result?.scoreB ?? teamBScore));
+            setEditingScore(true);
+            setEditingPlayers(false);
+            setSkipMenuOpen(false);
+          }}
+          className="mt-2 h-11 w-full rounded-lg bg-court text-sm font-black text-white"
+        >
+          Edit Score
+        </button>
+      )}
+      {saved && playedResult && editingScore && (
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <button
+            onClick={() => {
+              onScore(match.court, "scoreA", String(result?.scoreA ?? 0));
+              onScore(match.court, "scoreB", String(result?.scoreB ?? 0));
+              setEditingScore(false);
+            }}
+            className="h-11 rounded-lg bg-mist text-sm font-black text-ink"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => {
+              if (window.confirm("Update this result? Leaderboard will be recalculated.")) {
+                onUpdateSavedScore(match);
+                setEditingScore(false);
+              }
+            }}
+            disabled={!canSave}
+            className="h-11 rounded-lg bg-ink text-sm font-black text-white disabled:bg-ink/25"
+          >
+            Save Updated Score
+          </button>
+        </div>
+      )}
+      {saved && !playedResult && (
         <button
           onClick={() => onClearResult(match)}
           className="mt-2 h-11 w-full rounded-lg bg-clay/10 text-sm font-black text-clay"
@@ -5563,11 +5654,11 @@ function ScoreRow({
   onPlayerChange: (court: number, team: "teamA" | "teamB", playerIndex: number, playerId: number) => void;
   onMarkLeft: (id: number) => void;
 }) {
+  const [pickerOpen, setPickerOpen] = useState(false);
   const currentScore = scoreValue(score);
-  const canDecrease = !saved && currentScore > 0 && !scoreLockedLabel;
-  const canIncrease = !saved && !scoreLockedLabel && (allowExtraPoints || currentScore < scoreTarget);
+  const maxScore = Math.max(scoreTarget + (allowExtraPoints ? 5 : 0), scoreTarget);
   const setScore = (nextScore: number) => {
-    const clamped = Math.max(0, allowExtraPoints ? nextScore : Math.min(nextScore, scoreTarget));
+    const clamped = Math.max(0, Math.min(nextScore, maxScore));
     onChange(String(clamped));
   };
 
@@ -5582,33 +5673,37 @@ function ScoreRow({
           </p>
         </div>
         {scoreLockedLabel ? (
-          <div className="flex h-10 w-14 items-center justify-center rounded-lg border border-ink/10 bg-mist text-center text-xs font-black text-ink/45">
-            {scoreLockedLabel}
+          <div className="flex min-h-12 min-w-20 flex-col items-center justify-center rounded-lg border border-ink/10 bg-mist px-3 text-center text-ink/40">
+            <span className="text-[9px] font-black uppercase leading-none">Score</span>
+            <span className="mt-0.5 text-xs font-black">{scoreLockedLabel}</span>
           </div>
         ) : (
-          <div className="grid grid-cols-[36px_44px_36px] items-center gap-1">
-            <button
-              onClick={() => setScore(currentScore - 1)}
-              disabled={!canDecrease}
-              className="flex h-10 items-center justify-center rounded-lg bg-mist text-ink disabled:text-ink/20"
-              aria-label={`Decrease Team ${label} score`}
-            >
-              <Minus size={18} />
-            </button>
-            <div className="flex h-10 items-center justify-center rounded-lg border border-ink/10 bg-white text-xl font-black text-ink">
-              {currentScore}
-            </div>
-            <button
-              onClick={() => setScore(currentScore + 1)}
-              disabled={!canIncrease}
-              className="flex h-10 items-center justify-center rounded-lg bg-court text-white disabled:bg-ink/10 disabled:text-ink/25"
-              aria-label={`Increase Team ${label} score`}
-            >
-              <Plus size={18} />
-            </button>
-          </div>
+          <button
+            onClick={() => setPickerOpen(true)}
+            disabled={saved}
+            className="flex min-h-12 min-w-20 flex-col items-center justify-center rounded-lg border-2 border-court/70 bg-lime/80 px-4 text-ink shadow-sm shadow-court/10 transition hover:border-court focus:outline-none focus:ring-2 focus:ring-court/30 disabled:border-ink/10 disabled:bg-mist disabled:text-ink/40"
+            aria-label={`Pick Team ${label} score`}
+          >
+            <span className="text-[9px] font-black uppercase leading-none text-court">Tap to score</span>
+            <span className="mt-0.5 text-2xl font-black leading-none">{currentScore}</span>
+          </button>
         )}
       </div>
+      {pickerOpen && !saved && (
+        <ScorePickerSheet
+          label={label}
+          players={players}
+          selectedScore={currentScore}
+          maxScore={maxScore}
+          targetScore={scoreTarget}
+          allowExtraPoints={allowExtraPoints}
+          onSelect={(nextScore) => {
+            setScore(nextScore);
+            setPickerOpen(false);
+          }}
+          onClose={() => setPickerOpen(false)}
+        />
+      )}
       {editing && (
       <div className="grid gap-1">
         {players.map((player, index) => {
@@ -5646,6 +5741,73 @@ function ScoreRow({
         })}
       </div>
       )}
+    </div>
+  );
+}
+
+function ScorePickerSheet({
+  label,
+  players,
+  selectedScore,
+  maxScore,
+  targetScore,
+  allowExtraPoints,
+  onSelect,
+  onClose
+}: {
+  label: string;
+  players: Player[];
+  selectedScore: number;
+  maxScore: number;
+  targetScore: number;
+  allowExtraPoints: boolean;
+  onSelect: (score: number) => void;
+  onClose: () => void;
+}) {
+  const options = Array.from({ length: maxScore + 1 }, (_, index) => index);
+
+  return (
+    <div className="fixed inset-0 z-40 flex items-end justify-center bg-ink/35 px-3 pb-3 pt-10 md:items-center">
+      <div className="max-h-[82vh] w-full max-w-md overflow-hidden rounded-lg bg-white shadow-soft md:max-w-xl">
+        <div className="flex items-start justify-between gap-3 border-b border-ink/10 p-4">
+          <div>
+            <p className="text-xs font-black uppercase text-court">Team {label} Score</p>
+            <h3 className="mt-1 text-lg font-black">
+              {players.map((player) => player.name.split(" ")[0]).join(" / ")}
+            </h3>
+            <p className="mt-1 text-xs font-bold text-ink/50">
+              Target {targetScore}{allowExtraPoints ? `, extra points to ${maxScore}` : ""}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-mist text-ink"
+            aria-label="Close score picker"
+          >
+            <X size={18} />
+          </button>
+        </div>
+        <div className="max-h-[58vh] overflow-y-auto p-3">
+          <div className="grid grid-cols-4 gap-2 sm:grid-cols-6 md:grid-cols-7">
+            {options.map((scoreOption) => (
+              <button
+                key={scoreOption}
+                onClick={() => onSelect(scoreOption)}
+                className={`h-12 rounded-lg text-base font-black ${
+                  selectedScore === scoreOption ? "bg-ink text-white" : "bg-mist text-ink"
+                }`}
+              >
+                {scoreOption}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="border-t border-ink/10 p-3">
+          <button onClick={onClose} className="h-11 w-full rounded-lg bg-mist text-sm font-black text-ink">
+            Cancel
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
