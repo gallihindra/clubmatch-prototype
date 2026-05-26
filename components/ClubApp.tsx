@@ -1218,7 +1218,7 @@ export default function ClubApp() {
   const [sessionFormat] = useState<SessionFormat>("Smart Rotation");
   const [matchmakingMode, setMatchmakingMode] = useState<MatchmakingMode>("smart");
   const [doublesFormat, setDoublesFormat] = useState<DoublesFormat>("open");
-  const [avoidFormatMismatch, setAvoidFormatMismatch] = useState(true);
+  const [avoidFormatMismatch, setAvoidFormatMismatch] = useState(false);
   const [sameTierPercentage, setSameTierPercentage] = useState(80);
   const [mixedTierPercentage, setMixedTierPercentage] = useState(20);
   const [roundLimitMode, setRoundLimitMode] = useState<RoundLimitMode>("manual");
@@ -1986,6 +1986,7 @@ export default function ClubApp() {
     setParticipationSchedule([]);
     setScheduleRegenerationNote("No schedule generated yet.");
     setTotalRounds(baseRoundLimit);
+    setAvoidFormatMismatch(false);
     setSessionEnded(false);
     setMatches([]);
     setCompletedSessionStored(false);
