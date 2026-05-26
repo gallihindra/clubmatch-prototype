@@ -5089,7 +5089,13 @@ function LeaderboardScreen({
           </div>
         )}
       </Card>
-      <div className="space-y-3 lg:col-span-2 lg:grid lg:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)] lg:items-start lg:gap-4 lg:space-y-0">
+      <div
+        className={
+          displayMode === "standings"
+            ? "space-y-3 lg:col-span-2 lg:grid lg:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)] lg:items-start lg:gap-4 lg:space-y-0"
+            : "space-y-3 pb-24 md:pb-6"
+        }
+      >
       {!hasCurrentStats && (
         <Card>
           <p className="text-sm font-bold text-ink/60">
@@ -5211,10 +5217,10 @@ function LeaderboardSnapshot({
   };
 
   return (
-    <section className="overflow-hidden rounded-lg bg-white shadow-soft">
-      <div className="bg-ink p-4 text-white">
+    <section className="w-full overflow-hidden rounded-lg bg-white shadow-soft">
+      <div className="bg-ink p-4 text-white md:p-5">
         <p className="text-xs font-black uppercase tracking-[0.16em] text-lime">Session Leaderboard</p>
-        <h2 className="mt-1 text-2xl font-black">Snapshot</h2>
+        <h2 className="mt-1 text-2xl font-black md:text-3xl">Snapshot</h2>
         <div className="mt-3 flex flex-wrap gap-2">
           <span className="rounded-full bg-white/10 px-3 py-1 text-[11px] font-black">{sessionFormat}</span>
           <span className="rounded-full bg-white/10 px-3 py-1 text-[11px] font-black">
@@ -5225,7 +5231,7 @@ function LeaderboardSnapshot({
           </span>
         </div>
       </div>
-      <div className="space-y-2 p-3">
+      <div className="space-y-2 p-3 sm:grid sm:grid-cols-2 sm:gap-2 sm:space-y-0 lg:grid-cols-3">
         {players.map((player, index) => {
           const stat = getPlayerStat(sessionStats, player.id);
           const winRate = stat.matches ? Math.round((stat.wins / stat.matches) * 100) : 0;
@@ -5240,7 +5246,7 @@ function LeaderboardSnapshot({
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-start justify-between gap-2">
-                    <p className="truncate text-sm font-black">{player.name}</p>
+                    <p className="truncate text-sm font-black md:text-base">{player.name}</p>
                     <span className="shrink-0 rounded-full bg-white/70 px-2 py-1 text-[11px] font-black">
                       {stat.wins}-{stat.losses}
                     </span>
