@@ -555,7 +555,9 @@ function generateParticipationSchedule({
   sessionFormat,
   doublesFormat,
   matchmakingMode,
-  lockedSchedule = []
+  lockedSchedule = [],
+  initialMatchCounts = {},
+  countLockedSchedule = true
 }: {
   players: Player[];
   totalRounds: number;
@@ -564,6 +566,8 @@ function generateParticipationSchedule({
   doublesFormat: DoublesFormat;
   matchmakingMode: MatchmakingMode;
   lockedSchedule?: ParticipationScheduleEntry[];
+  initialMatchCounts?: Record<number, number>;
+  countLockedSchedule?: boolean;
 }) {
   const schedulePlayers = eligiblePlayersForDoublesFormat(players, doublesFormat);
   const activeCount = Math.min(courtCount * 4, Math.floor(schedulePlayers.length / 4) * 4);
@@ -572,7 +576,7 @@ function generateParticipationSchedule({
   const targetMax = schedulePlayers.length > 0 ? Math.ceil(totalSlots / schedulePlayers.length) : 0;
   const playerIds = schedulePlayers.map((player) => player.id);
   const playerIdSet = new Set(playerIds);
-  const counts = Object.fromEntries(playerIds.map((id) => [id, 0]));
+  const counts = Object.fromEntries(playerIds.map((id) => [id, initialMatchCounts[id] ?? 0]));
   const consecutiveBench = Object.fromEntries(playerIds.map((id) => [id, 0]));
   const groupUseCounts: Record<string, number> = {};
   const coAppearanceCounts: Record<string, number> = {};
@@ -585,15 +589,17 @@ function generateParticipationSchedule({
     const playingIds = entry.playingPlayerIds.filter((id) => playerIdSet.has(id));
     const playingIdSet = new Set(playingIds);
 
-    playingIds.forEach((id) => {
-      counts[id] = (counts[id] ?? 0) + 1;
-    });
-    coAppearancePairKeys(schedulePlayers.filter((player) => playingIdSet.has(player.id))).forEach((key) => {
-      coAppearanceCounts[key] = (coAppearanceCounts[key] ?? 0) + 1;
-    });
-    if (playingIds.length > 0) {
-      const groupKey = idPairKey(playingIds);
-      groupUseCounts[groupKey] = (groupUseCounts[groupKey] ?? 0) + 1;
+    if (countLockedSchedule) {
+      playingIds.forEach((id) => {
+        counts[id] = (counts[id] ?? 0) + 1;
+      });
+      coAppearancePairKeys(schedulePlayers.filter((player) => playingIdSet.has(player.id))).forEach((key) => {
+        coAppearanceCounts[key] = (coAppearanceCounts[key] ?? 0) + 1;
+      });
+      if (playingIds.length > 0) {
+        const groupKey = idPairKey(playingIds);
+        groupUseCounts[groupKey] = (groupUseCounts[groupKey] ?? 0) + 1;
+      }
     }
     playerIds.forEach((id) => {
       consecutiveBench[id] = playingIdSet.has(id) ? 0 : (consecutiveBench[id] ?? 0) + 1;
@@ -1332,7 +1338,9 @@ export default function ClubApp() {
   const buildParticipationSchedule = (
     schedulePlayers: Player[],
     scheduleTotalRounds: number,
-    lockedSchedule: ParticipationScheduleEntry[] = []
+    lockedSchedule: ParticipationScheduleEntry[] = [],
+    initialMatchCounts: Record<number, number> = {},
+    countLockedSchedule = true
   ) =>
     generateParticipationSchedule({
       players: schedulePlayers,
@@ -1341,8 +1349,15 @@ export default function ClubApp() {
       sessionFormat,
       doublesFormat,
       matchmakingMode,
-      lockedSchedule
+      lockedSchedule,
+      initialMatchCounts,
+      countLockedSchedule
     });
+  const roundIsLockedForSchedule = (round: number) => {
+    const roundMatchList = roundMatches[round] ?? [];
+
+    return roundMatchList.length > 0 && roundMatchList.every((match) => isResolvedResult(savedResults[matchResultKey(round, match.court)]));
+  };
   const regenerateFutureParticipationSchedule = (
     nextStatuses: Record<number, PlayerSessionStatus>,
     fromRound: number,
@@ -1350,11 +1365,38 @@ export default function ClubApp() {
     nextTotalRounds = totalRounds
   ) => {
     const availablePlayers = selectedPlayers.filter((player) => (nextStatuses[player.id] ?? "active") === "active");
-    const lockedSchedule = participationSchedule.filter((entry) => entry.roundNumber < fromRound);
-    const nextSchedule = buildParticipationSchedule(availablePlayers, nextTotalRounds, lockedSchedule);
+    const recalculated = getSessionStatsFromMatches({ players: selectedPlayers, roundMatches, savedResults });
+    const lockedSchedule = participationSchedule.filter(
+      (entry) => entry.roundNumber < fromRound || roundIsLockedForSchedule(entry.roundNumber)
+    );
+    const nextSchedule = buildParticipationSchedule(
+      availablePlayers,
+      nextTotalRounds,
+      lockedSchedule,
+      recalculated.playerMatchCounts,
+      false
+    );
 
     setParticipationSchedule(nextSchedule);
     setScheduleRegenerationNote(note);
+  };
+  const regenerateFutureParticipationScheduleFromTruth = (fromRound: number, note: string) => {
+    const availablePlayers = selectedPlayers.filter((player) => (sessionPlayerStatuses[player.id] ?? "active") === "active");
+    const recalculated = getSessionStatsFromMatches({ players: selectedPlayers, roundMatches, savedResults });
+    const lockedSchedule = participationSchedule.filter(
+      (entry) => entry.roundNumber < fromRound || roundIsLockedForSchedule(entry.roundNumber)
+    );
+    const nextSchedule = buildParticipationSchedule(
+      availablePlayers,
+      totalRounds,
+      lockedSchedule,
+      recalculated.playerMatchCounts,
+      false
+    );
+
+    setParticipationSchedule(nextSchedule);
+    setScheduleRegenerationNote(note);
+    setCompletedSessionStored(false);
   };
   const setGeneratedRoundDebug = (
     requestedRound: number,
@@ -1834,6 +1876,7 @@ export default function ClubApp() {
 
     setMatches(editMatches);
     setRoundMatches((current) => ({ ...current, [roundNumber]: editMatches(current[roundNumber] ?? matches) }));
+    regenerateFutureParticipationScheduleFromTruth(roundNumber + 1, "Future schedule regenerated after a player replacement.");
   };
 
   const markPlayerLeft = (id: number) => {
@@ -1982,7 +2025,14 @@ export default function ClubApp() {
     const safeAdditionalRounds = Math.max(Math.floor(additionalRounds), 1);
     const nextTotalRounds = totalRounds + safeAdditionalRounds;
     const availablePlayers = getAvailableSessionPlayers();
-    const nextSchedule = buildParticipationSchedule(availablePlayers, nextTotalRounds, participationSchedule);
+    const recalculated = getSessionStatsFromMatches({ players: selectedPlayers, roundMatches, savedResults });
+    const nextSchedule = buildParticipationSchedule(
+      availablePlayers,
+      nextTotalRounds,
+      participationSchedule,
+      recalculated.playerMatchCounts,
+      false
+    );
 
     setAddedRoundCount((current) => current + safeAdditionalRounds);
     setTotalRounds(nextTotalRounds);
@@ -2426,6 +2476,12 @@ export default function ClubApp() {
             onCancelDeferredMatch={cancelDeferredMatch}
             onNextRound={nextRound}
             onAddRounds={addMoreRounds}
+            onRegenerateFutureRounds={() =>
+              regenerateFutureParticipationScheduleFromTruth(
+                matches.length > 0 ? roundNumber + 1 : roundNumber,
+                "Future schedule regenerated by host."
+              )
+            }
             onEndSession={endSession}
             onViewLeaderboard={() => setScreen("leaderboard")}
             onStartNewSession={startNewSessionSetup}
@@ -3276,6 +3332,7 @@ function ActiveSessionScreen({
   onCancelDeferredMatch,
   onNextRound,
   onAddRounds,
+  onRegenerateFutureRounds,
   onEndSession,
   onViewLeaderboard,
   onStartNewSession,
@@ -3321,6 +3378,7 @@ function ActiveSessionScreen({
   onCancelDeferredMatch: (round: number, court: number) => void;
   onNextRound: () => void;
   onAddRounds: (additionalRounds: number) => void;
+  onRegenerateFutureRounds: () => void;
   onEndSession: () => void;
   onViewLeaderboard: () => void;
   onStartNewSession: () => void;
@@ -3331,6 +3389,8 @@ function ActiveSessionScreen({
   const [customRounds, setCustomRounds] = useState("1");
   const [roundFilter, setRoundFilter] = useState<"all" | "current" | "completed" | "skipped" | "not_started">("all");
   const [expandedRound, setExpandedRound] = useState<number | null>(null);
+  const [schedulePreviewOpen, setSchedulePreviewOpen] = useState(false);
+  const [confirmScheduleRegeneration, setConfirmScheduleRegeneration] = useState(false);
   const [debugOpen, setDebugOpen] = useState(false);
   const isReplayMode = Boolean(activeReplay);
   const activeResultRound = activeReplay?.round ?? roundNumber;
@@ -3602,6 +3662,26 @@ function ActiveSessionScreen({
         onCancelMatch={onCancelDeferredMatch}
       />
 
+      <FullSchedulePreview
+        open={schedulePreviewOpen}
+        onToggle={() => setSchedulePreviewOpen((current) => !current)}
+        currentRound={roundNumber}
+        totalRounds={totalRounds}
+        courtCount={courtCount}
+        selectedPlayers={selectedPlayers}
+        sessionPlayers={sessionPlayers}
+        participationSchedule={participationSchedule}
+        roundMatches={roundMatches}
+        savedResults={savedResults}
+        confirmRegeneration={confirmScheduleRegeneration}
+        onRequestRegeneration={() => setConfirmScheduleRegeneration(true)}
+        onCancelRegeneration={() => setConfirmScheduleRegeneration(false)}
+        onConfirmRegeneration={() => {
+          onRegenerateFutureRounds();
+          setConfirmScheduleRegeneration(false);
+        }}
+      />
+
       {matches.length === 0 ? (
         <div className="space-y-3 lg:grid lg:grid-cols-[0.85fr_1.15fr] lg:items-start lg:gap-4 lg:space-y-0">
           <RoundOverview
@@ -3842,6 +3922,169 @@ function ActiveSessionScreen({
 }
 
 type RoundFilter = "all" | "current" | "completed" | "skipped" | "not_started";
+
+function FullSchedulePreview({
+  open,
+  onToggle,
+  currentRound,
+  totalRounds,
+  courtCount,
+  selectedPlayers,
+  sessionPlayers,
+  participationSchedule,
+  roundMatches,
+  savedResults,
+  confirmRegeneration,
+  onRequestRegeneration,
+  onCancelRegeneration,
+  onConfirmRegeneration
+}: {
+  open: boolean;
+  onToggle: () => void;
+  currentRound: number;
+  totalRounds: number;
+  courtCount: number;
+  selectedPlayers: Player[];
+  sessionPlayers: Player[];
+  participationSchedule: ParticipationScheduleEntry[];
+  roundMatches: Record<number, Match[]>;
+  savedResults: Record<string, SavedMatchResult>;
+  confirmRegeneration: boolean;
+  onRequestRegeneration: () => void;
+  onCancelRegeneration: () => void;
+  onConfirmRegeneration: () => void;
+}) {
+  const playerLookup = new Map(selectedPlayers.map((player) => [player.id, player]));
+  const activePlayerIds = new Set(sessionPlayers.map((player) => player.id));
+  const scheduledMatchesForRound = (round: number) => {
+    const actualMatches = roundMatches[round] ?? [];
+
+    if (actualMatches.length > 0) {
+      return actualMatches;
+    }
+
+    const entry = participationSchedule.find((scheduleEntry) => scheduleEntry.roundNumber === round);
+    const scheduledPlayers = entry?.playingPlayerIds
+      .map((id) => playerLookup.get(id))
+      .filter((player): player is Player => Boolean(player && activePlayerIds.has(player.id))) ?? [];
+
+    return Array.from({ length: Math.min(courtCount, Math.floor(scheduledPlayers.length / 4)) }, (_, courtIndex) => {
+      const courtPlayers = scheduledPlayers.slice(courtIndex * 4, courtIndex * 4 + 4);
+
+      return {
+        court: courtIndex + 1,
+        teamA: courtPlayers.slice(0, 2),
+        teamB: courtPlayers.slice(2, 4),
+        scoreA: "",
+        scoreB: ""
+      };
+    }).filter((match) => match.teamA.length === 2 && match.teamB.length === 2);
+  };
+  const roundStatus = (round: number) => {
+    const matches = roundMatches[round] ?? [];
+    const results = matches.map((match) => savedResults[matchResultKey(round, match.court)]).filter(Boolean);
+    const allResolved = matches.length > 0 && matches.every((match) => isResolvedResult(savedResults[matchResultKey(round, match.court)]));
+
+    if (results.some((result) => result.status === "deferred")) return "Deferred";
+    if (results.some((result) => result.status === "skipped_not_started" || result.status === "skipped_result" || result.status === "cancelled")) return "Skipped";
+    if (allResolved) return "Completed";
+    if (round === currentRound) return "Current";
+    return round > currentRound ? "Upcoming" : "Upcoming";
+  };
+  const statusClass = (status: string) => {
+    if (status === "Completed") return "bg-lime text-ink";
+    if (status === "Current") return "bg-court/10 text-court";
+    if (status === "Skipped") return "bg-clay/10 text-clay";
+    if (status === "Deferred") return "bg-court/10 text-court";
+    return "bg-white text-ink/60";
+  };
+
+  return (
+    <Card>
+      <button onClick={onToggle} className="flex w-full items-start justify-between gap-3 text-left">
+        <div>
+          <h2 className="text-lg font-black">Full Schedule</h2>
+          <p className="mt-1 text-xs font-bold text-ink/55">
+            Future rounds may change if player availability changes.
+          </p>
+        </div>
+        <span className="rounded-lg bg-mist px-3 py-2 text-xs font-black">{open ? "Hide" : "All Rounds"}</span>
+      </button>
+
+      {open && (
+        <div className="mt-4 space-y-3">
+          <div className="rounded-lg bg-mist p-3">
+            <p className="text-xs font-bold text-ink/55">
+              Completed rounds stay locked. Regeneration updates upcoming rounds only.
+            </p>
+            {!confirmRegeneration ? (
+              <button
+                onClick={onRequestRegeneration}
+                className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-court text-sm font-black text-white"
+              >
+                <RefreshCw size={16} /> Regenerate Future Rounds
+              </button>
+            ) : (
+              <div className="mt-3 rounded-lg bg-white p-3">
+                <p className="text-sm font-black">This will update upcoming rounds only. Completed rounds will stay unchanged.</p>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <button onClick={onCancelRegeneration} className="h-10 rounded-lg bg-mist text-sm font-black text-ink">
+                    Cancel
+                  </button>
+                  <button onClick={onConfirmRegeneration} className="h-10 rounded-lg bg-ink text-sm font-black text-white">
+                    Confirm
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            {Array.from({ length: totalRounds }, (_, index) => index + 1).map((round) => {
+              const entry = participationSchedule.find((scheduleEntry) => scheduleEntry.roundNumber === round);
+              const matches = scheduledMatchesForRound(round);
+              const playingIds = new Set(matches.flatMap((match) => [...match.teamA, ...match.teamB].map((player) => player.id)));
+              const benchedPlayers = (entry?.benchedPlayerIds ?? selectedPlayers.filter((player) => !playingIds.has(player.id)).map((player) => player.id))
+                .map((id) => playerLookup.get(id))
+                .filter((player): player is Player => Boolean(player));
+              const status = roundStatus(round);
+
+              return (
+                <div key={round} className="rounded-lg bg-mist p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-black">Round {round}</p>
+                      <p className="text-xs font-semibold text-ink/55">
+                        {matches.length ? `${matches.length} court${matches.length === 1 ? "" : "s"}` : "No courts scheduled"}
+                      </p>
+                    </div>
+                    <span className={`rounded-full px-2 py-1 text-[11px] font-black ${statusClass(status)}`}>{status}</span>
+                  </div>
+                  <div className="mt-2 space-y-2">
+                    {matches.map((match) => (
+                      <div key={match.court} className="rounded-lg bg-white px-3 py-2">
+                        <p className="text-xs font-black">Court {match.court}</p>
+                        <p className="mt-1 truncate text-xs font-semibold text-ink/60">
+                          A: {match.teamA.map((player) => player.name.split(" ")[0]).join(" / ")}
+                        </p>
+                        <p className="truncate text-xs font-semibold text-ink/60">
+                          B: {match.teamB.map((player) => player.name.split(" ")[0]).join(" / ")}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-2 truncate text-xs font-bold text-ink/50">
+                    Bench: {benchedPlayers.length ? benchedPlayers.map((player) => player.name.split(" ")[0]).join(", ") : "None"}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
 
 function UnavailablePlayersSection({
   unavailablePlayers,
