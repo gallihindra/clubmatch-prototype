@@ -2245,26 +2245,6 @@ export default function ClubApp() {
     }
   };
 
-  const replaySkippedRound = (round: number) => {
-    const replayMatches = roundMatches[round] ?? [];
-    const replayMatch = replayMatches.find((match) => savedResults[matchResultKey(round, match.court)]?.status === "skipped_not_started");
-
-    if (!replayMatch) {
-      return;
-    }
-
-    console.log("[ClubMatch] replay skipped round", {
-      originalRound: round,
-      court: replayMatch.court,
-      teamA: replayMatch.teamA.map((player) => player.name),
-      teamB: replayMatch.teamB.map((player) => player.name)
-    });
-
-    setReplayRoundNumber(round);
-    setActiveReplay({ round, court: replayMatch.court });
-    setMatches([{ ...replayMatch, scoreA: "", scoreB: "" }]);
-  };
-
   const playDeferredMatch = (round: number, court: number) => {
     const pendingMatch = (roundMatches[round] ?? []).find((match) => match.court === court);
     const key = matchResultKey(round, court);
@@ -2462,7 +2442,6 @@ export default function ClubApp() {
               saveMatchResult(match, status, unavailableIds, unavailableStatus)
             }
             onClearResult={clearMatchResult}
-            onReplayRound={replaySkippedRound}
             onPlayDeferredMatch={playDeferredMatch}
             onCancelDeferredMatch={cancelDeferredMatch}
             onNextRound={nextRound}
@@ -3318,7 +3297,6 @@ function ActiveSessionScreen({
   onSaveResult,
   onSkipResult,
   onClearResult,
-  onReplayRound,
   onPlayDeferredMatch,
   onCancelDeferredMatch,
   onNextRound,
@@ -3364,7 +3342,6 @@ function ActiveSessionScreen({
     unavailableStatus?: "not_arrived" | "temporarily_unavailable"
   ) => void;
   onClearResult: (match: Match) => void;
-  onReplayRound: (round: number) => void;
   onPlayDeferredMatch: (round: number, court: number) => void;
   onCancelDeferredMatch: (round: number, court: number) => void;
   onNextRound: () => void;
@@ -3380,7 +3357,6 @@ function ActiveSessionScreen({
   const [customRounds, setCustomRounds] = useState("1");
   const [roundFilter, setRoundFilter] = useState<"all" | "current" | "completed" | "skipped" | "not_started">("all");
   const [expandedRound, setExpandedRound] = useState<number | null>(null);
-  const [schedulePreviewOpen, setSchedulePreviewOpen] = useState(false);
   const [confirmScheduleRegeneration, setConfirmScheduleRegeneration] = useState(false);
   const [debugOpen, setDebugOpen] = useState(false);
   const isReplayMode = Boolean(activeReplay);
@@ -3652,17 +3628,29 @@ function ActiveSessionScreen({
             <RefreshCw size={20} /> {canGenerate ? "Generate mock round" : "Not enough available players to generate a round."}
           </button>
           <div className="lg:order-1">
-            <RoundOverview
+            <ScheduleSection
               totalRounds={totalRounds}
               currentRound={roundNumber}
               replayRoundNumber={replayRoundNumber}
+              courtCount={courtCount}
+              selectedPlayers={selectedPlayers}
+              sessionPlayers={sessionPlayers}
+              participationSchedule={participationSchedule}
               roundMatches={roundMatches}
               savedResults={savedResults}
               filter={roundFilter}
               expandedRound={expandedRound}
               onFilterChange={setRoundFilter}
               onToggleRound={(round) => setExpandedRound((current) => (current === round ? null : round))}
-              onReplayRound={onReplayRound}
+              confirmRegeneration={confirmScheduleRegeneration}
+              onRequestRegeneration={() => setConfirmScheduleRegeneration(true)}
+              onCancelRegeneration={() => setConfirmScheduleRegeneration(false)}
+              onConfirmRegeneration={() => {
+                onRegenerateFutureRounds();
+                setConfirmScheduleRegeneration(false);
+              }}
+              onPlayReplay={onPlayDeferredMatch}
+              onCancelMatch={onCancelDeferredMatch}
             />
           </div>
         </div>
@@ -3836,17 +3824,29 @@ function ActiveSessionScreen({
           )}
         </div>
           <div className="space-y-3 lg:order-1 lg:sticky lg:top-24">
-            <RoundOverview
+            <ScheduleSection
               totalRounds={totalRounds}
               currentRound={roundNumber}
               replayRoundNumber={replayRoundNumber}
+              courtCount={courtCount}
+              selectedPlayers={selectedPlayers}
+              sessionPlayers={sessionPlayers}
+              participationSchedule={participationSchedule}
               roundMatches={roundMatches}
               savedResults={savedResults}
               filter={roundFilter}
               expandedRound={expandedRound}
               onFilterChange={setRoundFilter}
               onToggleRound={(round) => setExpandedRound((current) => (current === round ? null : round))}
-              onReplayRound={onReplayRound}
+              confirmRegeneration={confirmScheduleRegeneration}
+              onRequestRegeneration={() => setConfirmScheduleRegeneration(true)}
+              onCancelRegeneration={() => setConfirmScheduleRegeneration(false)}
+              onConfirmRegeneration={() => {
+                onRegenerateFutureRounds();
+                setConfirmScheduleRegeneration(false);
+              }}
+              onPlayReplay={onPlayDeferredMatch}
+              onCancelMatch={onCancelDeferredMatch}
             />
           </div>
         </div>
@@ -3858,31 +3858,6 @@ function ActiveSessionScreen({
         onStatusChange={onPlayerStatusChange}
       />
 
-      <PendingMatchesSection
-        pendingMatches={pendingReplayMatches}
-        onPlayNow={onPlayDeferredMatch}
-        onCancelMatch={onCancelDeferredMatch}
-      />
-
-      <FullSchedulePreview
-        open={schedulePreviewOpen}
-        onToggle={() => setSchedulePreviewOpen((current) => !current)}
-        currentRound={roundNumber}
-        totalRounds={totalRounds}
-        courtCount={courtCount}
-        selectedPlayers={selectedPlayers}
-        sessionPlayers={sessionPlayers}
-        participationSchedule={participationSchedule}
-        roundMatches={roundMatches}
-        savedResults={savedResults}
-        confirmRegeneration={confirmScheduleRegeneration}
-        onRequestRegeneration={() => setConfirmScheduleRegeneration(true)}
-        onCancelRegeneration={() => setConfirmScheduleRegeneration(false)}
-        onConfirmRegeneration={() => {
-          onRegenerateFutureRounds();
-          setConfirmScheduleRegeneration(false);
-        }}
-      />
       <ActiveSessionDebugPanel
         open={debugOpen}
         onToggle={() => setDebugOpen((current) => !current)}
@@ -3916,6 +3891,257 @@ function ActiveSessionScreen({
 }
 
 type RoundFilter = "all" | "current" | "completed" | "skipped" | "not_started";
+
+function ScheduleSection({
+  totalRounds,
+  currentRound,
+  replayRoundNumber,
+  courtCount,
+  selectedPlayers,
+  sessionPlayers,
+  participationSchedule,
+  roundMatches,
+  savedResults,
+  filter,
+  expandedRound,
+  confirmRegeneration,
+  onFilterChange,
+  onToggleRound,
+  onRequestRegeneration,
+  onCancelRegeneration,
+  onConfirmRegeneration,
+  onPlayReplay,
+  onCancelMatch
+}: {
+  totalRounds: number;
+  currentRound: number;
+  replayRoundNumber: number | null;
+  courtCount: number;
+  selectedPlayers: Player[];
+  sessionPlayers: Player[];
+  participationSchedule: ParticipationScheduleEntry[];
+  roundMatches: Record<number, Match[]>;
+  savedResults: Record<string, SavedMatchResult>;
+  filter: RoundFilter;
+  expandedRound: number | null;
+  confirmRegeneration: boolean;
+  onFilterChange: (filter: RoundFilter) => void;
+  onToggleRound: (round: number) => void;
+  onRequestRegeneration: () => void;
+  onCancelRegeneration: () => void;
+  onConfirmRegeneration: () => void;
+  onPlayReplay: (round: number, court: number) => void;
+  onCancelMatch: (round: number, court: number) => void;
+}) {
+  const playerLookup = new Map(selectedPlayers.map((player) => [player.id, player]));
+  const activePlayerIds = new Set(sessionPlayers.map((player) => player.id));
+  const rounds = Array.from({ length: totalRounds }, (_, index) => index + 1);
+  const scheduledMatchesForRound = (round: number) => {
+    const actualMatches = roundMatches[round] ?? [];
+
+    if (actualMatches.length > 0) {
+      return actualMatches;
+    }
+
+    const entry = participationSchedule.find((scheduleEntry) => scheduleEntry.roundNumber === round);
+    const scheduledPlayers = entry?.playingPlayerIds
+      .map((id) => playerLookup.get(id))
+      .filter((player): player is Player => Boolean(player && activePlayerIds.has(player.id))) ?? [];
+
+    return Array.from({ length: Math.min(courtCount, Math.floor(scheduledPlayers.length / 4)) }, (_, courtIndex) => {
+      const courtPlayers = scheduledPlayers.slice(courtIndex * 4, courtIndex * 4 + 4);
+
+      return {
+        court: courtIndex + 1,
+        teamA: courtPlayers.slice(0, 2),
+        teamB: courtPlayers.slice(2, 4),
+        scoreA: "",
+        scoreB: ""
+      };
+    }).filter((match) => match.teamA.length === 2 && match.teamB.length === 2);
+  };
+  const getRoundStatus = (round: number) => {
+    const matches = roundMatches[round] ?? [];
+    const results = matches.map((match) => savedResults[matchResultKey(round, match.court)]).filter(Boolean);
+    const allMatchesResolved = matches.length > 0 && matches.every((match) => isResolvedResult(savedResults[matchResultKey(round, match.court)]));
+
+    if (round === currentRound && !allMatchesResolved) return "current";
+    if (results.some((result) => result.status === "cancelled")) return "cancelled";
+    if (results.some((result) => result.status === "deferred")) return "deferred";
+    if (results.some((result) => result.status === "skipped_not_started" || result.status === "skipped_result")) return "skipped";
+    if (allMatchesResolved) return "completed";
+    return round > currentRound ? "upcoming" : "not_started";
+  };
+  const statusLabel = (status: string) => ({
+    current: "Current",
+    completed: "Completed",
+    skipped: "Skipped",
+    deferred: "Deferred",
+    cancelled: "Cancelled",
+    not_started: "Not Started",
+    upcoming: "Upcoming"
+  }[status] ?? "Upcoming");
+  const statusClass = (status: string) => {
+    if (status === "completed") return "bg-lime text-ink";
+    if (status === "current") return "bg-court/10 text-court";
+    if (status === "skipped" || status === "cancelled") return "bg-clay/10 text-clay";
+    if (status === "deferred") return "bg-court/10 text-court";
+    return "bg-white text-ink/60";
+  };
+  const visibleRounds = rounds.filter((round) => {
+    const status = getRoundStatus(round);
+    if (filter === "all") return true;
+    if (filter === "completed") return status === "completed";
+    if (filter === "skipped") return status === "skipped" || status === "cancelled" || status === "deferred";
+    if (filter === "not_started") return status === "not_started" || status === "upcoming";
+    return status === "current";
+  });
+
+  return (
+    <Card>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-black">Schedule</h2>
+          <p className="mt-1 text-xs font-bold text-ink/55">Updates upcoming rounds only.</p>
+        </div>
+        {!confirmRegeneration ? (
+          <button
+            onClick={onRequestRegeneration}
+            className="h-9 shrink-0 rounded-lg bg-mist px-3 text-[11px] font-black text-ink"
+          >
+            Regenerate
+          </button>
+        ) : (
+          <div className="grid shrink-0 grid-cols-2 gap-1">
+            <button onClick={onCancelRegeneration} className="h-9 rounded-lg bg-mist px-2 text-[11px] font-black text-ink">
+              No
+            </button>
+            <button onClick={onConfirmRegeneration} className="h-9 rounded-lg bg-ink px-2 text-[11px] font-black text-white">
+              Confirm
+            </button>
+          </div>
+        )}
+      </div>
+      {confirmRegeneration && (
+        <p className="mt-2 rounded-lg bg-mist px-3 py-2 text-xs font-bold text-ink/55">
+          This updates upcoming rounds only. Completed rounds stay locked.
+        </p>
+      )}
+      <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+        {([
+          ["all", "All"],
+          ["current", "Current"],
+          ["completed", "Completed"],
+          ["skipped", "Skipped"],
+          ["not_started", "Not Started"]
+        ] as [RoundFilter, string][]).map(([id, label]) => (
+          <button
+            key={id}
+            onClick={() => onFilterChange(id)}
+            className={`h-9 shrink-0 rounded-lg px-3 text-xs font-black ${filter === id ? "bg-ink text-white" : "bg-mist text-ink/60"}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <div className="mt-3 space-y-2">
+        {visibleRounds.map((round) => {
+          const matches = scheduledMatchesForRound(round);
+          const actualMatches = roundMatches[round] ?? [];
+          const status = getRoundStatus(round);
+          const expanded = expandedRound === round;
+          const entry = participationSchedule.find((scheduleEntry) => scheduleEntry.roundNumber === round);
+          const playingIds = new Set(matches.flatMap((match) => [...match.teamA, ...match.teamB].map((player) => player.id)));
+          const benchedPlayers = (entry?.benchedPlayerIds ?? selectedPlayers.filter((player) => !playingIds.has(player.id)).map((player) => player.id))
+            .map((id) => playerLookup.get(id))
+            .filter((player): player is Player => Boolean(player));
+          const isScheduledOnly = actualMatches.length === 0 && matches.length > 0;
+          const results = actualMatches.map((match) => savedResults[matchResultKey(round, match.court)]).filter(Boolean);
+          const resultLabel = replayRoundNumber === round
+            ? `Round ${round} Replay`
+            : results.some((result) => result.replayCompleted)
+              ? `Round ${round} Replay Completed`
+            : statusLabel(status);
+
+          return (
+            <div key={round} className="rounded-lg bg-mist">
+              <button
+                onClick={() => onToggleRound(round)}
+                className="flex min-h-11 w-full items-start justify-between gap-2 px-3 py-2 text-left"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-black">Round {round}</p>
+                  <p className="truncate text-xs font-semibold text-ink/55">
+                    {matches.length ? `${matches.length} court${matches.length === 1 ? "" : "s"}` : "No courts"} - Bench: {benchedPlayers.length ? benchedPlayers.map((player) => player.name.split(" ")[0]).join(", ") : "None"}
+                  </p>
+                </div>
+                <span className={`shrink-0 rounded-full px-2 py-1 text-[11px] font-black ${statusClass(status)}`}>
+                  {resultLabel}
+                </span>
+              </button>
+              {expanded && (
+                <div className="space-y-2 border-t border-ink/10 px-3 py-2">
+                  {matches.length === 0 && (
+                    <p className="rounded-lg bg-white px-3 py-2 text-xs font-bold text-ink/55">
+                      No teams generated yet.
+                    </p>
+                  )}
+                  {isScheduledOnly && (
+                    <p className="rounded-lg bg-white px-3 py-2 text-xs font-bold text-ink/55">
+                      Participation is planned. Teams will be finalized when this round is generated.
+                    </p>
+                  )}
+                  {matches.map((match) => {
+                    const result = savedResults[matchResultKey(round, match.court)];
+                    const score = result ? matchScoreLabel(result) : "N/A";
+                    const pendingReplay = result?.status === "deferred" || result?.status === "skipped_not_started";
+
+                    return (
+                      <div key={match.court} className="rounded-lg bg-white px-3 py-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-xs font-black">Court {match.court}</p>
+                          <p className="text-xs font-black text-court">{score}</p>
+                        </div>
+                        <p className="mt-1 truncate text-xs font-semibold text-ink/60">
+                          A: {match.teamA.map((player) => player.name.split(" ")[0]).join(" / ")}
+                        </p>
+                        <p className="truncate text-xs font-semibold text-ink/60">
+                          B: {match.teamB.map((player) => player.name.split(" ")[0]).join(" / ")}
+                        </p>
+                        <p className="mt-1 text-[11px] font-black text-ink/45">
+                          Status: {result ? matchStatusLabel(result) : isScheduledOnly ? "Scheduled" : "Not Started"}
+                        </p>
+                        {pendingReplay && (
+                          <div className="mt-2 grid grid-cols-2 gap-2">
+                            <button
+                              onClick={() => onPlayReplay(round, match.court)}
+                              className="h-9 rounded-lg bg-court px-2 text-xs font-black text-white"
+                            >
+                              Round {round} Replay
+                            </button>
+                            <button
+                              onClick={() => onCancelMatch(round, match.court)}
+                              className="h-9 rounded-lg bg-clay/10 px-2 text-xs font-black text-clay"
+                            >
+                              Cancel Match
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  <p className="truncate text-xs font-bold text-ink/50">
+                    Benched: {benchedPlayers.length ? benchedPlayers.map((player) => player.name).join(", ") : "None"}
+                  </p>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
 
 function FullSchedulePreview({
   open,
@@ -4094,6 +4320,7 @@ function PlayerAvailabilitySection({
 }) {
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState<PlayerSessionStatus | "all">("all");
+  const [changingPlayerId, setChangingPlayerId] = useState<number | null>(null);
   const statusOptions: { value: PlayerSessionStatus; label: string; shortLabel: string }[] = [
     { value: "active", label: "Active", shortLabel: "Active" },
     { value: "not_arrived", label: "Not Arrived", shortLabel: "Not Arrived" },
@@ -4127,7 +4354,10 @@ function PlayerAvailabilitySection({
           <p className="mt-1 text-xs font-bold text-ink/55">Future rounds update when status changes.</p>
         </div>
         <button
-          onClick={() => setOpen((current) => !current)}
+          onClick={() => {
+            setOpen((current) => !current);
+            setChangingPlayerId(null);
+          }}
           className="h-10 shrink-0 rounded-lg bg-ink px-3 text-xs font-black text-white"
         >
           {open ? "Done" : "Manage Availability"}
@@ -4147,7 +4377,10 @@ function PlayerAvailabilitySection({
             {unavailablePlayers.length} unavailable: {unavailablePreview}
           </p>
           <button
-            onClick={() => setOpen(true)}
+            onClick={() => {
+              setOpen(true);
+              setChangingPlayerId(null);
+            }}
             className="h-8 shrink-0 rounded-lg bg-white px-3 text-xs font-black text-clay"
           >
             Manage
@@ -4161,7 +4394,10 @@ function PlayerAvailabilitySection({
             {filterOptions.map((option) => (
               <button
                 key={option.value}
-                onClick={() => setFilter(option.value)}
+                onClick={() => {
+                  setFilter(option.value);
+                  setChangingPlayerId(null);
+                }}
                 className={`h-8 shrink-0 rounded-lg px-3 text-[11px] font-black ${
                   filter === option.value ? "bg-ink text-white" : "bg-white text-ink/60"
                 }`}
@@ -4174,28 +4410,46 @@ function PlayerAvailabilitySection({
           <div className="mt-2 divide-y divide-ink/10 overflow-hidden rounded-lg bg-white">
             {filteredPlayers.map((player) => {
               const status = playerStatus(player);
+              const changing = changingPlayerId === player.id;
 
               return (
-                <div key={player.id} className="grid grid-cols-[1fr_auto] gap-2 px-2 py-2">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-black">{player.name}</p>
-                    <p className={`text-[11px] font-black ${status === "active" ? "text-court" : "text-clay"}`}>
-                      {playerStatusLabel(status)}
-                    </p>
+                <div key={player.id} className="px-2 py-2">
+                  <div className="grid grid-cols-[1fr_auto] items-center gap-2">
+                    <div className="min-w-0">
+                      <p className="break-words text-sm font-black leading-tight">{player.name}</p>
+                      <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-black ${
+                        status === "active" ? "bg-lime text-ink" : "bg-clay/10 text-clay"
+                      }`}>
+                        {playerStatusLabel(status)}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => setChangingPlayerId((current) => (current === player.id ? null : player.id))}
+                      className="h-9 shrink-0 rounded-lg bg-mist px-3 text-xs font-black text-ink"
+                    >
+                      {changing ? "Close" : "Change"}
+                    </button>
                   </div>
-                  <div className="grid grid-cols-4 gap-1">
-                    {statusOptions.map((option) => (
-                      <button
-                        key={option.value}
-                        onClick={() => onStatusChange(player.id, option.value)}
-                        className={`h-8 rounded-md px-1.5 text-[10px] font-black ${
-                          status === option.value ? "bg-ink text-white" : "bg-mist text-ink/60"
-                        }`}
-                      >
-                        {option.shortLabel}
-                      </button>
-                    ))}
-                  </div>
+                  {changing && (
+                    <div className="mt-2 rounded-lg bg-mist p-2">
+                      <div className="grid grid-cols-2 gap-1">
+                        {statusOptions.map((option) => (
+                          <button
+                            key={option.value}
+                            onClick={() => {
+                              onStatusChange(player.id, option.value);
+                              setChangingPlayerId(null);
+                            }}
+                            className={`h-9 rounded-lg px-2 text-[11px] font-black ${
+                              status === option.value ? "bg-ink text-white" : "bg-white text-ink/60"
+                            }`}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -4207,6 +4461,15 @@ function PlayerAvailabilitySection({
           <p className="mt-2 text-[11px] font-bold text-ink/45">
             Completed rounds and saved scores stay locked. Leaderboard stats only use saved matches.
           </p>
+          <button
+            onClick={() => {
+              setOpen(false);
+              setChangingPlayerId(null);
+            }}
+            className="mt-3 h-10 w-full rounded-lg bg-ink text-xs font-black text-white"
+          >
+            Done
+          </button>
         </div>
       )}
     </Card>
