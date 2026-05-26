@@ -28,6 +28,7 @@ type Screen = "home" | "players" | "new" | "active" | "leaderboard";
 type SessionFormat = "Smart Rotation";
 type RoundLimitMode = "manual" | "duration";
 type LeaderboardView = "host" | "player";
+type LeaderboardDisplayMode = "standings" | "snapshot";
 type MatchmakingMode = "smart" | "tier" | "custom";
 type GenderCategory = NonNullable<Player["genderCategory"]>;
 type DoublesFormat = "open" | "mens" | "womens" | "mixed";
@@ -2439,6 +2440,9 @@ export default function ClubApp() {
             roundMatches={roundMatches}
             savedResults={savedResults}
             lastCompletedSession={lastCompletedSession}
+            sessionFormat={sessionFormat}
+            totalRounds={totalRounds}
+            courtCount={courtCount}
           />
         )}
       </section>
@@ -4983,15 +4987,22 @@ function LeaderboardScreen({
   sessionStats,
   roundMatches,
   savedResults,
-  lastCompletedSession
+  lastCompletedSession,
+  sessionFormat,
+  totalRounds,
+  courtCount
 }: {
   players: Player[];
   sessionStats: Record<number, SessionStat>;
   roundMatches: Record<number, Match[]>;
   savedResults: Record<string, SavedMatchResult>;
   lastCompletedSession: CompletedSessionSummary | null;
+  sessionFormat: SessionFormat;
+  totalRounds: number;
+  courtCount: number;
 }) {
   const [leaderboardView, setLeaderboardView] = useState<LeaderboardView>("host");
+  const [displayMode, setDisplayMode] = useState<LeaderboardDisplayMode>("standings");
   const [fullscreenOpen, setFullscreenOpen] = useState(false);
   const recalculatedSession = getSessionStatsFromMatches({ players, roundMatches, savedResults });
   const leaderboardStats = recalculatedSession.stats;
@@ -5002,6 +5013,9 @@ function LeaderboardScreen({
   const previousRanked = lastCompletedSession ? rankPlayers(players, lastCompletedSession.stats) : [];
   const hasCurrentStats = ranked.some((player) => getPlayerStat(leaderboardStats, player.id).matches > 0);
   const showSkillData = leaderboardView === "host" || showSkillDataToPlayers;
+  const completedRounds = Object.entries(roundMatches).filter(([roundKey, matches]) =>
+    matches.length > 0 && matches.every((match) => isResolvedResult(savedResults[matchResultKey(Number(roundKey), match.court)]))
+  ).length;
 
   return (
     <div className="space-y-3">
@@ -5019,33 +5033,53 @@ function LeaderboardScreen({
             </p>
           </div>
         </div>
-        <div className="mt-4 grid grid-cols-[1fr_auto] gap-2">
-          <div className="grid grid-cols-2 gap-2 rounded-lg bg-mist p-1">
-            <button
-              onClick={() => setLeaderboardView("host")}
-              className={`h-11 rounded-lg text-sm font-black ${
-                leaderboardView === "host" ? "bg-ink text-white" : "text-ink/60"
-              }`}
-            >
-              Host View
-            </button>
-            <button
-              onClick={() => setLeaderboardView("player")}
-              className={`h-11 rounded-lg text-sm font-black ${
-                leaderboardView === "player" ? "bg-ink text-white" : "text-ink/60"
-              }`}
-            >
-              Player View
-            </button>
-          </div>
+        <div className="mt-4 grid grid-cols-2 gap-2 rounded-lg bg-mist p-1">
           <button
-            onClick={() => setFullscreenOpen(true)}
-            className="flex h-[52px] items-center justify-center rounded-lg bg-court px-4 text-sm font-black text-white shadow-soft"
-            aria-label="Expand leaderboard"
+            onClick={() => setDisplayMode("standings")}
+            className={`h-11 rounded-lg text-sm font-black ${
+              displayMode === "standings" ? "bg-ink text-white" : "text-ink/60"
+            }`}
           >
-            Expand
+            Standings
+          </button>
+          <button
+            onClick={() => setDisplayMode("snapshot")}
+            className={`h-11 rounded-lg text-sm font-black ${
+              displayMode === "snapshot" ? "bg-ink text-white" : "text-ink/60"
+            }`}
+          >
+            Snapshot
           </button>
         </div>
+        {displayMode === "standings" && (
+          <div className="mt-3 grid grid-cols-[1fr_auto] gap-2">
+            <div className="grid grid-cols-2 gap-2 rounded-lg bg-mist p-1">
+              <button
+                onClick={() => setLeaderboardView("host")}
+                className={`h-11 rounded-lg text-sm font-black ${
+                  leaderboardView === "host" ? "bg-ink text-white" : "text-ink/60"
+                }`}
+              >
+                Host View
+              </button>
+              <button
+                onClick={() => setLeaderboardView("player")}
+                className={`h-11 rounded-lg text-sm font-black ${
+                  leaderboardView === "player" ? "bg-ink text-white" : "text-ink/60"
+                }`}
+              >
+                Player View
+              </button>
+            </div>
+            <button
+              onClick={() => setFullscreenOpen(true)}
+              className="flex h-[52px] items-center justify-center rounded-lg bg-court px-4 text-sm font-black text-white shadow-soft"
+              aria-label="Expand leaderboard"
+            >
+              Expand
+            </button>
+          </div>
+        )}
       </Card>
       {!hasCurrentStats && (
         <Card>
@@ -5060,43 +5094,56 @@ function LeaderboardScreen({
           <p className="mt-1 text-xs font-bold text-ink/55">Leaderboard is using recalculated saved/completed match results.</p>
         </Card>
       )}
-      <Card>
-        <StandingsTable players={ranked} sessionStats={leaderboardStats} showSkillData={showSkillData} mode="compact" />
-      </Card>
-      <Card>
-        <h2 className="text-lg font-black">Previous Session Summary</h2>
-        {lastCompletedSession ? (
-          <div className="mt-3 space-y-2">
-            <p className="text-sm font-semibold text-ink/55">
-              Last completed session: {lastCompletedSession.totalRounds} rounds
-            </p>
-            {previousRanked.slice(0, 3).map((player, index) => {
-              const stat = getPlayerStat(lastCompletedSession.stats, player.id);
-              const scoreDiff = stat.pointsFor - stat.pointsAgainst;
+      {displayMode === "standings" ? (
+        <>
+          <Card>
+            <StandingsTable players={ranked} sessionStats={leaderboardStats} showSkillData={showSkillData} mode="compact" />
+          </Card>
+          <Card>
+            <h2 className="text-lg font-black">Previous Session Summary</h2>
+            {lastCompletedSession ? (
+              <div className="mt-3 space-y-2">
+                <p className="text-sm font-semibold text-ink/55">
+                  Last completed session: {lastCompletedSession.totalRounds} rounds
+                </p>
+                {previousRanked.slice(0, 3).map((player, index) => {
+                  const stat = getPlayerStat(lastCompletedSession.stats, player.id);
+                  const scoreDiff = stat.pointsFor - stat.pointsAgainst;
 
-              return (
-                <div key={player.id} className="flex items-center justify-between rounded-lg bg-mist px-3 py-2">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-black">
-                      {index + 1}. {player.name}
-                    </p>
-                    <p className="text-xs font-semibold text-ink/50">
-                      {stat.wins}W-{stat.losses}L - Diff {scoreDiff}
-                    </p>
-                  </div>
-                  {showSkillData && (
-                    <span className="rounded-full bg-white px-2 py-1 text-xs font-black">Tier {player.tier}</span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <p className="mt-2 text-sm font-semibold text-ink/55">
-            Complete a session to save a local summary here.
-          </p>
-        )}
-      </Card>
+                  return (
+                    <div key={player.id} className="flex items-center justify-between rounded-lg bg-mist px-3 py-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-black">
+                          {index + 1}. {player.name}
+                        </p>
+                        <p className="text-xs font-semibold text-ink/50">
+                          {stat.wins}W-{stat.losses}L - Diff {scoreDiff}
+                        </p>
+                      </div>
+                      {showSkillData && (
+                        <span className="rounded-full bg-white px-2 py-1 text-xs font-black">Tier {player.tier}</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="mt-2 text-sm font-semibold text-ink/55">
+                Complete a session to save a local summary here.
+              </p>
+            )}
+          </Card>
+        </>
+      ) : (
+        <LeaderboardSnapshot
+          players={ranked}
+          sessionStats={leaderboardStats}
+          sessionFormat={sessionFormat}
+          completedRounds={completedRounds}
+          totalRounds={totalRounds}
+          courtCount={courtCount}
+        />
+      )}
       {fullscreenOpen && (
         <div className="fixed inset-0 z-50 bg-mist">
           <div className="mx-auto flex h-screen w-full max-w-5xl flex-col">
@@ -5122,6 +5169,90 @@ function LeaderboardScreen({
         </div>
       )}
     </div>
+  );
+}
+
+function LeaderboardSnapshot({
+  players,
+  sessionStats,
+  sessionFormat,
+  completedRounds,
+  totalRounds,
+  courtCount
+}: {
+  players: Player[];
+  sessionStats: Record<number, SessionStat>;
+  sessionFormat: SessionFormat;
+  completedRounds: number;
+  totalRounds: number;
+  courtCount: number;
+}) {
+  const rankClass = (index: number) => {
+    if (index === 0) return "border-lime bg-lime/40";
+    if (index === 1) return "border-ink/15 bg-white";
+    if (index === 2) return "border-court/30 bg-court/10";
+    return "border-transparent bg-mist";
+  };
+  const rankBadgeClass = (index: number) => {
+    if (index === 0) return "bg-lime text-ink";
+    if (index === 1) return "bg-white text-ink";
+    if (index === 2) return "bg-court/20 text-court";
+    return "bg-white text-ink/70";
+  };
+
+  return (
+    <section className="overflow-hidden rounded-lg bg-white shadow-soft">
+      <div className="bg-ink p-4 text-white">
+        <p className="text-xs font-black uppercase tracking-[0.16em] text-lime">Session Leaderboard</p>
+        <h2 className="mt-1 text-2xl font-black">Snapshot</h2>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <span className="rounded-full bg-white/10 px-3 py-1 text-[11px] font-black">{sessionFormat}</span>
+          <span className="rounded-full bg-white/10 px-3 py-1 text-[11px] font-black">
+            {completedRounds}/{totalRounds} rounds
+          </span>
+          <span className="rounded-full bg-white/10 px-3 py-1 text-[11px] font-black">
+            {courtCount} {courtCount === 1 ? "court" : "courts"}
+          </span>
+        </div>
+      </div>
+      <div className="space-y-2 p-3">
+        {players.map((player, index) => {
+          const stat = getPlayerStat(sessionStats, player.id);
+          const winRate = stat.matches ? Math.round((stat.wins / stat.matches) * 100) : 0;
+          const scoreDiff = stat.pointsFor - stat.pointsAgainst;
+          const scoreDiffLabel = `${scoreDiff > 0 ? "+" : ""}${scoreDiff} DIFF`;
+
+          return (
+            <div key={player.id} className={`rounded-lg border p-3 ${rankClass(index)}`}>
+              <div className="flex items-center gap-3">
+                <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xs font-black ${rankBadgeClass(index)}`}>
+                  {index === 0 ? <Trophy size={17} /> : `#${index + 1}`}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="truncate text-sm font-black">{player.name}</p>
+                    <span className="shrink-0 rounded-full bg-white/70 px-2 py-1 text-[11px] font-black">
+                      {stat.wins}-{stat.losses}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs font-bold text-ink/60">
+                    {stat.wins}-{stat.losses} - {winRate}% WR - {scoreDiffLabel}
+                  </p>
+                  <p className="mt-1 text-[11px] font-semibold text-ink/45">
+                    PF {stat.pointsFor} - PA {stat.pointsAgainst}
+                  </p>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="border-t border-ink/10 px-4 py-3">
+        <p className="text-center text-[11px] font-black uppercase tracking-[0.14em] text-ink/45">
+          ClubMatch Prototype - Generated from session results
+        </p>
+      </div>
+    </section>
   );
 }
 
