@@ -32,7 +32,6 @@ type LeaderboardDisplayMode = "standings" | "snapshot";
 type MatchmakingMode = "smart" | "tier" | "custom";
 type GenderCategory = NonNullable<Player["genderCategory"]>;
 type DoublesFormat = "open" | "mens" | "womens" | "mixed";
-type ScoreTargetOption = "11" | "15" | "21" | "custom";
 type PlayerTier = Player["tier"];
 type PlayerDraft = {
   name: string;
@@ -1226,9 +1225,6 @@ export default function ClubApp() {
   const [sessionDurationMinutes, setSessionDurationMinutes] = useState(180);
   const [estimatedRoundMinutes, setEstimatedRoundMinutes] = useState(15);
   const [manualRoundCount, setManualRoundCount] = useState(8);
-  const [scoreTargetOption, setScoreTargetOption] = useState<ScoreTargetOption>("11");
-  const [customScoreTarget, setCustomScoreTarget] = useState(11);
-  const [allowExtraPoints, setAllowExtraPoints] = useState(false);
   const [totalRounds, setTotalRounds] = useState(8);
   const [addedRoundCount, setAddedRoundCount] = useState(0);
   const [roundNumber, setRoundNumber] = useState(1);
@@ -1991,9 +1987,6 @@ export default function ClubApp() {
     setScheduleRegenerationNote("No schedule generated yet.");
     setTotalRounds(baseRoundLimit);
     setAvoidFormatMismatch(false);
-    setScoreTargetOption("11");
-    setCustomScoreTarget(11);
-    setAllowExtraPoints(false);
     setSessionEnded(false);
     setMatches([]);
     setCompletedSessionStored(false);
@@ -2441,9 +2434,6 @@ export default function ClubApp() {
             sessionDurationMinutes={sessionDurationMinutes}
             estimatedRoundMinutes={estimatedRoundMinutes}
             manualRoundCount={manualRoundCount}
-            scoreTargetOption={scoreTargetOption}
-            customScoreTarget={customScoreTarget}
-            allowExtraPoints={allowExtraPoints}
             totalRounds={totalRounds}
             onToggle={togglePlayer}
             onSelectAll={() => setSelectedIds(clubPlayers.map((player) => player.id))}
@@ -2458,9 +2448,6 @@ export default function ClubApp() {
             onSessionDurationMinutesChange={setSessionDurationMinutes}
             onEstimatedRoundMinutesChange={setEstimatedRoundMinutes}
             onManualRoundCountChange={setManualRoundCount}
-            onScoreTargetOptionChange={setScoreTargetOption}
-            onCustomScoreTargetChange={setCustomScoreTarget}
-            onAllowExtraPointsChange={setAllowExtraPoints}
             onStart={startSession}
           />
         )}
@@ -2486,8 +2473,6 @@ export default function ClubApp() {
             lastDeferredPlayerIdsForNextRound={lastDeferredPlayerIdsForNextRound}
             deferredMatchBlocks={deferredMatchBlocks}
             savedResults={savedResults}
-            scoreTarget={scoreTargetOption === "custom" ? customScoreTarget : Number(scoreTargetOption)}
-            allowExtraPoints={allowExtraPoints}
             leftPlayerIds={leftPlayerIds}
             onGenerate={() => createRound()}
             onScore={updateScore}
@@ -2899,9 +2884,6 @@ function NewSessionScreen({
   sessionDurationMinutes,
   estimatedRoundMinutes,
   manualRoundCount,
-  scoreTargetOption,
-  customScoreTarget,
-  allowExtraPoints,
   totalRounds,
   onToggle,
   onSelectAll,
@@ -2916,9 +2898,6 @@ function NewSessionScreen({
   onSessionDurationMinutesChange,
   onEstimatedRoundMinutesChange,
   onManualRoundCountChange,
-  onScoreTargetOptionChange,
-  onCustomScoreTargetChange,
-  onAllowExtraPointsChange,
   onStart
 }: {
   selectedPlayers: Player[];
@@ -2936,9 +2915,6 @@ function NewSessionScreen({
   sessionDurationMinutes: number;
   estimatedRoundMinutes: number;
   manualRoundCount: number;
-  scoreTargetOption: ScoreTargetOption;
-  customScoreTarget: number;
-  allowExtraPoints: boolean;
   totalRounds: number;
   onToggle: (id: number) => void;
   onSelectAll: () => void;
@@ -2953,9 +2929,6 @@ function NewSessionScreen({
   onSessionDurationMinutesChange: (minutes: number) => void;
   onEstimatedRoundMinutesChange: (minutes: number) => void;
   onManualRoundCountChange: (rounds: number) => void;
-  onScoreTargetOptionChange: (target: ScoreTargetOption) => void;
-  onCustomScoreTargetChange: (score: number) => void;
-  onAllowExtraPointsChange: (allow: boolean) => void;
   onStart: () => void;
 }) {
   const baseCanStart = selectedPlayers.length >= 4 && totalRounds >= 1;
@@ -2965,7 +2938,6 @@ function NewSessionScreen({
   const playersPerRound = displayedCourtCount * 4;
   const benchedPerRound = Math.max(selectedPlayers.length - playersPerRound, 0);
   const estimatedSessionLength = totalRounds * estimatedRoundMinutes;
-  const scoreTarget = scoreTargetOption === "custom" ? customScoreTarget : Number(scoreTargetOption);
   const canDecreaseCourts = courtCount > 1;
   const canIncreaseCourts = maxCourtCount > 0 && courtCount < maxCourtCount;
   const maleCount = selectedPlayers.filter((player) => genderOf(player) === "male").length;
@@ -3299,53 +3271,6 @@ function NewSessionScreen({
       </Card>
 
       <Card>
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h2 className="text-xl font-black">Scoring</h2>
-            <p className="mt-1 text-sm text-ink/60">Set the score picker target for this session.</p>
-          </div>
-          <span className="rounded-lg bg-lime px-3 py-2 text-sm font-black">Target {scoreTarget}</span>
-        </div>
-        <div className="mt-4 grid grid-cols-4 gap-2">
-          {(["11", "15", "21", "custom"] as ScoreTargetOption[]).map((target) => (
-            <button
-              key={target}
-              onClick={() => onScoreTargetOptionChange(target)}
-              className={`h-11 rounded-lg px-2 text-xs font-black ${
-                scoreTargetOption === target ? "bg-ink text-white" : "bg-mist text-ink/60"
-              }`}
-            >
-              {target === "custom" ? "Custom" : target}
-            </button>
-          ))}
-        </div>
-        {scoreTargetOption === "custom" && (
-          <label className="mt-3 block">
-            <span className="text-sm font-black">Custom max score</span>
-            <input
-              value={customScoreTarget}
-              onChange={(event) => onCustomScoreTargetChange(updateNumber(event.target.value, customScoreTarget))}
-              inputMode="numeric"
-              className="mt-2 h-12 w-full rounded-lg border border-ink/10 bg-mist px-3 text-center text-xl font-black outline-none focus:border-court"
-              aria-label="Custom max score"
-            />
-          </label>
-        )}
-        <button
-          onClick={() => onAllowExtraPointsChange(!allowExtraPoints)}
-          className="mt-3 flex min-h-11 w-full items-center justify-between rounded-lg bg-mist px-3 text-left"
-        >
-          <span>
-            <span className="block text-sm font-black">Allow extra points</span>
-            <span className="block text-xs font-semibold text-ink/55">For deuce or extended games.</span>
-          </span>
-          <span className={`rounded-full px-3 py-1 text-xs font-black ${allowExtraPoints ? "bg-lime text-ink" : "bg-white text-ink/50"}`}>
-            {allowExtraPoints ? "On" : "Off"}
-          </span>
-        </button>
-      </Card>
-
-      <Card>
         <h2 className="text-xl font-black">Session Summary</h2>
         <div className="mt-4 grid grid-cols-2 gap-2">
           <Stat label="Format" value={sessionFormat} />
@@ -3356,10 +3281,7 @@ function NewSessionScreen({
           <Stat label="Doubles" value={doublesFormatLabel(doublesFormat)} />
           <Stat label="Selected players" value={String(selectedPlayers.length)} />
           <Stat label="Courts" value={String(displayedCourtCount)} />
-          <Stat label="Playing per round" value={String(playersPerRound)} />
-          <Stat label="Benched per round" value={String(benchedPerRound)} />
           <Stat label="Total rounds" value={String(totalRounds)} />
-          <Stat label="Score target" value={`${scoreTarget}${allowExtraPoints ? "+" : ""}`} />
         </div>
         <div className="mt-2 rounded-lg bg-mist p-3">
           <p className="text-xs font-semibold text-ink/55">Estimated session length</p>
@@ -3400,8 +3322,6 @@ function ActiveSessionScreen({
   doublesFormat,
   avoidFormatMismatch,
   savedResults,
-  scoreTarget,
-  allowExtraPoints,
   sessionPlayerStatuses,
   generationDebug,
   generationHistoryDebug,
@@ -3443,8 +3363,6 @@ function ActiveSessionScreen({
   doublesFormat: DoublesFormat;
   avoidFormatMismatch: boolean;
   savedResults: Record<string, SavedMatchResult>;
-  scoreTarget: number;
-  allowExtraPoints: boolean;
   sessionPlayerStatuses: Record<number, PlayerSessionStatus>;
   generationDebug: GenerationDebug | null;
   generationHistoryDebug: GenerationHistoryDebugEntry[];
@@ -3795,8 +3713,6 @@ function ActiveSessionScreen({
                   isReplayMode={isReplayMode}
                   availablePlayers={sessionPlayers}
                   leftPlayerIds={leftPlayerIds}
-                  scoreTarget={scoreTarget}
-                  allowExtraPoints={allowExtraPoints}
                   resultRound={activeResultRound}
                   onScore={onScore}
                   onPlayerChange={onPlayerChange}
@@ -5363,8 +5279,6 @@ function CourtCard({
   onPlayLater,
   onPlayReplay,
   onClearResult,
-  scoreTarget,
-  allowExtraPoints,
   resultRound
 }: {
   match: Match;
@@ -5388,8 +5302,6 @@ function CourtCard({
   onPlayLater: (match: Match) => void;
   onPlayReplay: (round: number, court: number) => void;
   onClearResult: (match: Match) => void;
-  scoreTarget: number;
-  allowExtraPoints: boolean;
   resultRound: number;
 }) {
   const [skipMenuOpen, setSkipMenuOpen] = useState(false);
@@ -5399,8 +5311,7 @@ function CourtCard({
   const [unavailableStatus, setUnavailableStatus] = useState<"not_arrived" | "temporarily_unavailable">("not_arrived");
   const teamAScore = scoreValue(match.scoreA);
   const teamBScore = scoreValue(match.scoreB);
-  const maxAllowedScore = scoreTarget + (allowExtraPoints ? 5 : 0);
-  const canSave = teamAScore !== teamBScore && teamAScore <= maxAllowedScore && teamBScore <= maxAllowedScore;
+  const canSave = teamAScore !== teamBScore && teamAScore <= 21 && teamBScore <= 21;
   const matchPlayers = [...match.teamA, ...match.teamB];
   const statusLabel = matchStatusLabel(result);
   const playedResult = isPlayedResult(result);
@@ -5453,8 +5364,6 @@ function CourtCard({
         availablePlayers={availablePlayers}
         leftPlayerIds={leftPlayerIds}
         onChange={(value) => onScore(match.court, "scoreA", value)}
-        scoreTarget={scoreTarget}
-        allowExtraPoints={allowExtraPoints}
         onPlayerChange={onPlayerChange}
         onMarkLeft={onMarkLeft}
       />
@@ -5471,8 +5380,6 @@ function CourtCard({
         availablePlayers={availablePlayers}
         leftPlayerIds={leftPlayerIds}
         onChange={(value) => onScore(match.court, "scoreB", value)}
-        scoreTarget={scoreTarget}
-        allowExtraPoints={allowExtraPoints}
         onPlayerChange={onPlayerChange}
         onMarkLeft={onMarkLeft}
       />
@@ -5657,8 +5564,6 @@ function ScoreRow({
   availablePlayers,
   leftPlayerIds,
   onChange,
-  scoreTarget,
-  allowExtraPoints,
   onPlayerChange,
   onMarkLeft
 }: {
@@ -5673,14 +5578,12 @@ function ScoreRow({
   availablePlayers: Player[];
   leftPlayerIds: number[];
   onChange: (value: string) => void;
-  scoreTarget: number;
-  allowExtraPoints: boolean;
   onPlayerChange: (court: number, team: "teamA" | "teamB", playerIndex: number, playerId: number) => void;
   onMarkLeft: (id: number) => void;
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const currentScore = scoreValue(score);
-  const maxScore = Math.max(scoreTarget + (allowExtraPoints ? 5 : 0), scoreTarget);
+  const maxScore = 21;
   const setScore = (nextScore: number) => {
     const clamped = Math.max(0, Math.min(nextScore, maxScore));
     onChange(String(clamped));
@@ -5721,8 +5624,6 @@ function ScoreRow({
           players={players}
           selectedScore={currentScore}
           maxScore={maxScore}
-          targetScore={scoreTarget}
-          allowExtraPoints={allowExtraPoints}
           onSelect={(nextScore) => {
             setScore(nextScore);
             setPickerOpen(false);
@@ -5776,8 +5677,6 @@ function ScorePickerSheet({
   players,
   selectedScore,
   maxScore,
-  targetScore,
-  allowExtraPoints,
   onSelect,
   onClose
 }: {
@@ -5785,8 +5684,6 @@ function ScorePickerSheet({
   players: Player[];
   selectedScore: number;
   maxScore: number;
-  targetScore: number;
-  allowExtraPoints: boolean;
   onSelect: (score: number) => void;
   onClose: () => void;
 }) {
@@ -5801,9 +5698,7 @@ function ScorePickerSheet({
             <h3 className="mt-1 text-lg font-black">
               {players.map((player) => player.name.split(" ")[0]).join(" / ")}
             </h3>
-            <p className="mt-1 text-xs font-bold text-ink/50">
-              Target {targetScore}{allowExtraPoints ? `, extra points to ${maxScore}` : ""}
-            </p>
+            <p className="mt-1 text-xs font-bold text-ink/50">Choose 0-21</p>
           </div>
           <button
             onClick={onClose}
